@@ -1,0 +1,14 @@
+[
+  {
+    "id": 1,
+    "name": "阿米娅",
+    "avatar": "../assets/amiya-01.jpg",
+    "route": "/chat/amiya"
+  },
+  {
+    "id": 2,
+    "name": "艾雅法拉",
+    "avatar": "../assets/eyjafjalla-01.jpg",
+    "route": "/chat/eyjafjalla"
+  }
+]
