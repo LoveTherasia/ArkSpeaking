@@ -3,4 +3,8 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/arkspeaking?serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
     username: root
-    password: 314730wsh
+    # password: 314730wsh
+    password: QHLPPTDYFN8566*
+
+server:
+  port: 8081

@@ -1,2 +1,11 @@
-E:\明日方舟大模型对话平台\backend\src\main\java\com\organization\arkspeakingApplication.java
-E:\明日方舟大模型对话平台\backend\src\main\java\com\organization\pojo\User.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\arkspeakingApplication.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\controller\UserController.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\exception\GlobalExceptionHandler.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\Interceptors\LoginInterceptor.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\mapper\UserMapper.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\pojo\Result.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\pojo\User.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\service\impl\UserServiceImpl.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\service\UserService.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\utils\JwtUtil.java
+D:\Project\ArkSpeaking\backend\src\main\java\com\organization\utils\Md5Util.java
