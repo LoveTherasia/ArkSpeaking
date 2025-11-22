@@ -14,7 +14,7 @@
     <h1>ArkSpeaking</h1>
     <div class="login-box">
       <p>请登录</p>
-      <form action="http://localhost:8080/user/login" method="post">
+      <form action="/user/login" method="post">
         <div class="user-input-container">
           <div class="input-username">
             <span >用户名:</span>
