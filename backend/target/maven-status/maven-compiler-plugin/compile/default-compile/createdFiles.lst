@@ -1,2 +1,11 @@
+com\organization\pojo\Result.class
+com\organization\service\impl\UserServiceImpl.class
+com\organization\service\UserService.class
+com\organization\utils\JwtUtil.class
+com\organization\mapper\UserMapper.class
+com\organization\utils\Md5Util.class
 com\organization\pojo\User.class
 com\organization\arkspeakingApplication.class
+com\organization\Interceptors\LoginInterceptor.class
+com\organization\controller\UserController.class
+com\organization\exception\GlobalExceptionHandler.class
