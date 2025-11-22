@@ -1,4 +1,4 @@
-<<script>
+<script>
   export default {
     name: "RegisterVue",
     methods: {
@@ -7,14 +7,14 @@
       }
     }
   }
-</script>>
+</script>
 
 <template>
   <div class="register-home">
     <h1>ArkSpeaking</h1>
     <div class="register-box">
       <p>请注册</p>
-      <form action="http://localhost:8080/user/register" method="post">
+      <form action="/user/register" method="post">
         <div class="user-input-container">
           <div class="input-username">
             <span >用户名:</span>
