@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "name": "阿米娅",
+    "characterId": "amiya",
+    "avatar": "../assets/amiya-01.jpg",
+    "route": "/chat/amiya"
+  },
+  {
+    "id": 2,
+    "name": "艾雅法拉",
+    "characterId": "eyjafjalla",
+    "avatar": "../assets/eyjafjalla-01.jpg",
+    "route": "/chat/eyjafjalla"
+  },
+  {
+    "id": 3,
+    "name": "澄闪",
+    "characterId": "goldenglow",
+    "avatar": "../assets/goldenglow-01.jpg",
+    "route": "/chat/goldenglow"
+  }
+]
