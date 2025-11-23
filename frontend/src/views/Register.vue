@@ -1,39 +1,92 @@
 <script>
-  export default {
-    name: "RegisterVue",
-    methods: {
-      register() {
-        this.$router.push('/user/register');
+export default {
+  name: "RegisterVue",
+  // 1. 新增：绑定表单数据（用于获取输入的密码和确认密码）
+  data() {
+    return {
+      username: "",
+      password: "",
+      confirmPassword: "",
+      passwordError: "" // 存储密码不一致的错误提示
+    };
+  },
+  methods: {
+    // 2. 新增：表单提交处理（包含密码验证逻辑）
+    handleSubmit() {
+      // 清空之前的错误提示
+      this.passwordError = "";
+
+      // 核心验证：判断密码和确认密码是否一致
+      if (this.password !== this.confirmPassword) {
+        this.passwordError = "密码和确认密码不一致，请重新输入！";
+        return; // 验证失败，终止表单提交
       }
+
+      // 验证通过：手动提交原生表单（保持你原来的 POST 提交逻辑）
+      this.$refs.registerForm.submit();
     }
   }
+};
 </script>
 
 <template>
   <div class="register-home">
     <h1>ArkSpeaking</h1>
     <div class="register-box">
-      <p>请注册</p>
-      <form action="/user/register" method="post">
+      <p class="register-title">请注册</p>
+      <!-- 3. 修改：绑定表单提交事件（阻止默认提交，触发自定义验证） -->
+      <form 
+        ref="registerForm"
+        action="/user/register" 
+        method="post"
+        @submit.prevent="handleSubmit"
+      >
         <div class="user-input-container">
           <div class="input-username">
-            <span >用户名:</span>
-            <input type="text" placeholder="请输入用户名" class="user-input-place" name="username"/>
+            <span>用户名 : </span>
+            <!-- 4. 修改：绑定 v-model 关联表单数据 -->
+            <input 
+              type="text" 
+              placeholder=" 请输入用户名" 
+              class="user-input-place" 
+              name="username"
+              v-model="username"
+              required
+            />
           </div>
           <div class="input-password">
-            <span>密码:</span>
-            <input type="password" placeholder="请输入密码" class="user-input-place" name="password"/>
+            <span>密码 : </span>
+            <!-- 4. 修改：绑定 v-model 关联表单数据 -->
+            <input 
+              type="password" 
+              placeholder=" 请输入密码" 
+              class="user-input-place" 
+              name="password"
+              v-model="password"
+              required
+            />
           </div>
           <div class="input-password-confirm">
-            <span>确认密码:</span>
-            <input type="password" placeholder="请再次输入密码" class="user-input-place" name="confirmPassword"/>
+            <span>确认密码 : </span>
+            <!-- 4. 修改：绑定 v-model 关联表单数据 -->
+            <input 
+              type="password" 
+              placeholder=" 请再次输入密码" 
+              class="user-input-place" 
+              name="confirmPassword"
+              v-model="confirmPassword" 
+              required
+            />
           </div>
+
+          <!-- 5. 新增：错误提示（密码不一致时显示） -->
+          <div class="error-tip">{{ passwordError }}</div>
+
           <button type="submit" class="register-button">注册</button>
         </div>
       </form>
 
       <router-link to="/user/login">已有账号？去登录</router-link>
-      
     </div>
   </div>
 </template>
@@ -64,8 +117,15 @@
   color: #fff;
 }
 
+.register-title{
+  font-size: 24px;
+  margin-bottom: 2px;
+  color: #fff;
+  text-align: center;
+}
+
 .register-box{
-  width: 400px;
+  width: 420px;
   height: 380px;
   margin: 100px auto;
   background: rgba(0,0,0,0.5);
@@ -122,6 +182,29 @@
   color: #fff;
   font-size: 18px;
   cursor: pointer;
+}
+
+/* 错误提示样式（红色、居中） */
+.error-tip{
+  color: #ff4d4f; /* 红色提示 */
+  font-size: 14px;
+  margin-top: 10px;
+  height: 20px; /* 固定高度：避免页面抖动 */
+  text-align: center;
+}
+
+/* 新增：按钮 hover 效果 */
+.register-button:hover{
+  background: #0066cc;
+}
+
+/* 调整路由链接样式 */
+a{
+  color: #1E90FF;
+  text-decoration: none;
+  display: block;
+  text-align: center;
+  margin-top: 15px;
 }
 
 </style>
