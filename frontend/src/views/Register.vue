@@ -11,18 +11,28 @@ export default {
     };
   },
   methods: {
-    // 2. 新增：表单提交处理（包含密码验证逻辑）
+    isValidPassword(pw) {
+      const allowed = /^[A-Za-z0-9!@#$%^&*()\-_=+\[\]\{\};:,\.\?\/]+$/
+      const hasLetter = /[A-Za-z]/
+      const hasDigit = /\d/
+      const hasSpecial = /[!@#$%^&*()\-_=+\[\]\{\};:,\.\?\/]/
+      return allowed.test(pw) && hasLetter.test(pw) && hasDigit.test(pw) && hasSpecial.test(pw)
+    },
+    // 提示优先级：确认密码不同 > 长度不对 > 字符集不对
     handleSubmit() {
-      // 清空之前的错误提示
       this.passwordError = "";
-
-      // 核心验证：判断密码和确认密码是否一致
+      if (this.password.length < 5 || this.password.length > 16) {
+        this.passwordError = "密码长度需在 5-16 位";
+        return;
+      }
+      if (!this.isValidPassword(this.password)) {
+        this.passwordError = "密码需包含字母、数字和指定特殊字符";
+        return;
+      }
       if (this.password !== this.confirmPassword) {
         this.passwordError = "密码和确认密码不一致，请重新输入！";
-        return; // 验证失败，终止表单提交
+        return;
       }
-
-      // 验证通过：手动提交原生表单（保持你原来的 POST 提交逻辑）
       this.$refs.registerForm.submit();
     }
   }
