@@ -18,7 +18,7 @@ export default {
       const hasSpecial = /[!@#$%^&*()\-_=+\[\]\{\};:,\.\?\/]/
       return allowed.test(pw) && hasLetter.test(pw) && hasDigit.test(pw) && hasSpecial.test(pw)
     },
-    // 提示优先级：确认密码不同 > 长度不对 > 字符集不对
+    // 提示优先级： 长度不对 > 字符集不对 > 确认密码不同
     handleSubmit() {
       this.passwordError = "";
       if (this.password.length < 5 || this.password.length > 16) {
