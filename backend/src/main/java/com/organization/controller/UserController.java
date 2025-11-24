@@ -1,19 +1,21 @@
 package com.organization.controller;
 
-import com.organization.pojo.Result;
-import com.organization.pojo.User;
-import com.organization.service.UserService;
-import com.organization.utils.JwtUtil;
-import com.organization.utils.Md5Util;
-import jakarta.validation.constraints.Pattern;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
-import java.util.Map;
+import com.organization.pojo.Result;
+import com.organization.pojo.User;
+import com.organization.service.UserService;
+import com.organization.utils.JwtUtil;
+import com.organization.utils.Md5Util;
+
+import jakarta.validation.constraints.Pattern;
 
 @RestController
 @RequestMapping("/user")
@@ -25,7 +27,7 @@ public class UserController {
 
     //注册接口
     @PostMapping("/register")
-    public Result Register(@Pattern(regexp = "^\\S{3,16}$")String username,@Pattern(regexp = "^\\S{5,16}$") String password) {
+    public Result<?> Register(@Pattern(regexp = "^\\S{3,16}$")String username,@Pattern(regexp = "^\\S{5,16}$") String password) {
         //查询用户名是否被占用
         User u = userService.findByUserName(username);
         if (u != null) {
@@ -41,7 +43,7 @@ public class UserController {
     }
 
     @PostMapping("/login")
-    public Result<String> Login(@Pattern(regexp = "^\\S{3,16}$")String username,@Pattern(regexp = "^\\S{5,16}$")String password)
+    public Result<?> Login(@Pattern(regexp = "^\\S{3,16}$")String username,@Pattern(regexp = "^\\S{5,16}$")String password)
     {
         User loginuser =  userService.findByUserName(username);
         if(loginuser==null){

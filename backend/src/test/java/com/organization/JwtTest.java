@@ -15,7 +15,7 @@ public class JwtTest {
 
     //测试能否正常生成JWT令牌
     @Test
-    public void JwtTest(){
+    public void generateJwt(){
         Map<String,Object> map = new HashMap<>();
         map.put("username","admin");
         map.put("password","123456");

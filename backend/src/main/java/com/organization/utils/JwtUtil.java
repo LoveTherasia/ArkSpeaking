@@ -1,12 +1,11 @@
 package com.organization.utils;
 
 
+import java.util.Date;
+import java.util.Map;
+
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
-
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
 public class JwtUtil {
     private static final String KEY = "wsh";
