@@ -39,11 +39,7 @@ export default {
     <h1>ArkSpeaking</h1>
     <div class="login-box">
       <p>请登录</p>
-<<<<<<< HEAD
-      <form action="http://localhost:8080/user/login" method="post">
-=======
       <form ref="loginForm" action="/user/login" method="post" @submit.prevent="handleSubmit">
->>>>>>> ad916acb3e749ff4a473a10a964f4ca906e6595e
         <div class="user-input-container">
           <div class="input-username">
             <span >用户名:</span>

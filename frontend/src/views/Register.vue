@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-<<script>
-  export default {
-    name: "RegisterVue",
-    methods: {
-      register() {
-        this.$router.push('/user/register');
-=======
 <script>
 export default {
   name: "RegisterVue",
@@ -32,7 +24,6 @@ export default {
       if (this.password.length < 5 || this.password.length > 16) {
         this.passwordError = "密码长度需在 5-16 位";
         return;
->>>>>>> ad916acb3e749ff4a473a10a964f4ca906e6595e
       }
       if (!this.isValidPassword(this.password)) {
         this.passwordError = "密码需包含字母、数字和指定特殊字符";
@@ -45,21 +36,13 @@ export default {
       this.$refs.registerForm.submit();
     }
   }
-<<<<<<< HEAD
-</script>>
-=======
 };
 </script>
->>>>>>> ad916acb3e749ff4a473a10a964f4ca906e6595e
 
 <template>
   <div class="register-home">
     <h1>ArkSpeaking</h1>
     <div class="register-box">
-<<<<<<< HEAD
-      <p>请注册</p>
-      <form action="http://localhost:8080/user/register" method="post">
-=======
       <p class="register-title">请注册</p>
       <!-- 3. 修改：绑定表单提交事件（阻止默认提交，触发自定义验证） -->
       <form 
@@ -68,7 +51,6 @@ export default {
         method="post"
         @submit.prevent="handleSubmit"
       >
->>>>>>> ad916acb3e749ff4a473a10a964f4ca906e6595e
         <div class="user-input-container">
           <div class="input-username">
             <span>用户名 : </span>
