@@ -41,6 +41,7 @@ export default {
 
 <template>
   <div class="register-home">
+    <router-link class="home-link" to="/">首页</router-link>
     <h1>ArkSpeaking</h1>
     <div class="register-box">
       <p class="register-title">请注册</p>
@@ -215,6 +216,12 @@ a{
   display: block;
   text-align: center;
   margin-top: 15px;
+}
+
+.home-link{
+  position: absolute;
+  top: 12px;
+  left: 12px;
 }
 
 </style>
