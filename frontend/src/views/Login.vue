@@ -1,12 +1,37 @@
 <script>
-  export default {
-    name: "LoginVue",
-    methods: {
-      register() {
-        this.$router.push('/user/register');
+export default {
+  name: "LoginVue",
+  data() {
+    return { passwordError: "" }
+  },
+  methods: {
+    // 校验字符集与分类要求（字母/数字/特殊字符）
+    isValidPasswordCharset(pw) {
+      const allowed = /^[A-Za-z0-9!@#$%^&*()\-_=+\[\]\{\};:,\.\?\/]+$/
+      const hasLetter = /[A-Za-z]/
+      const hasDigit = /\d/
+      const hasSpecial = /[!@#$%^&*()\-_=+\[\]\{\};:,\.\?\/]/
+      return allowed.test(pw) && hasLetter.test(pw) && hasDigit.test(pw) && hasSpecial.test(pw)
+    },
+    handleSubmit(e) {
+      const pw = e.target.password.value
+      this.passwordError = ""
+      // 优先级：长度不对 > 字符集不对
+      if (pw.length < 5 || pw.length > 16) {
+        this.passwordError = "密码长度需在 5-16 位"
+        return
       }
+      if (!this.isValidPasswordCharset(pw)) {
+        this.passwordError = "密码需包含字母、数字和指定特殊字符"
+        return
+      }
+      this.$refs.loginForm.submit()
+    },
+    register() {
+      this.$router.push('/user/register');
     }
   }
+}
 </script>
 
 <template>
@@ -14,7 +39,11 @@
     <h1>ArkSpeaking</h1>
     <div class="login-box">
       <p>请登录</p>
+<<<<<<< HEAD
       <form action="http://localhost:8080/user/login" method="post">
+=======
+      <form ref="loginForm" action="/user/login" method="post" @submit.prevent="handleSubmit">
+>>>>>>> ad916acb3e749ff4a473a10a964f4ca906e6595e
         <div class="user-input-container">
           <div class="input-username">
             <span >用户名:</span>
@@ -24,6 +53,7 @@
             <span>密码:</span>
             <input type="password" placeholder="请输入密码" class="user-input-place" name="password"/>
           </div>
+          <div class="error-tip">{{ passwordError }}</div>
           <button type="submit" class="login-button">登录</button>
         </div>
       </form>
@@ -111,6 +141,14 @@
   color: #fff;
   font-size: 18px;
   cursor: pointer;
+}
+
+.error-tip{
+  color: #ff4d4f;
+  font-size: 14px;
+  margin-top: 10px;
+  height: 20px;
+  text-align: center;
 }
 
 </style>
