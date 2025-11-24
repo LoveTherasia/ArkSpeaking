@@ -1,24 +1,22 @@
 <script setup>
-    import {ref,onMounted} from 'vue';
+    import {ref,onMounted, warn} from 'vue';
+    import { loadCharacter } from '@/utils/loadCharacter';
 
+    import router from '@/router.js';
     const characterList = ref([]);
 
     // 组件挂载后异步加载 JSON
     onMounted(async () => {
-    try {
-        // 动态导入 JSON
-        const res = await import('../data/characters.json');
-        characterList.value = res.default.map(character => ({
-            ...character,
-            avatar: new URL(character.avatar, import.meta.url).href
-        }));
-    } catch (error) {
-        console.error('加载角色数据失败：', error);
-        characterList.value = [
-        { id: 0, name: "加载失败", avatar: "../assets/default-avatar.jpg", route: "#" }
-        ];
+        characterList.value = await loadCharacter();
+    });
+
+    const goToChat = (characterId) =>{
+        alert(characterId);
+        router.push({
+            name:'Chat',
+            params:{characterId},
+        })
     }
-});
 </script>
 
 <template>
@@ -39,7 +37,7 @@
         <div class="main">
             <!-- 对话角色选择框 -->
             <div class="model-box">
-                <div class="character-box" v-for="character in characterList" :key="character.id">
+                <div class="character-box" v-for="character in characterList" :key="character.id" @click="goToChat(character.characterId)">
                     <div class="character-box-avatar" :style="{ backgroundImage: `url(${character.avatar})` }"></div>
                     <div class="character-name">{{ character.name }}</div>
                 </div>

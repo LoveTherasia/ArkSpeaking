@@ -5,7 +5,17 @@ const router = createRouter({
     routes:[
         {path:'/',component:()=>import('./views/Main.vue')},
         {path:'/user/login',component:()=>import('./views/Login.vue')},
-        {path:'/user/register',component:()=>import('./views/Register.vue')}
+        {path:'/user/register',component:()=>import('./views/Register.vue')},
+        {path:'/chat/:characterId',
+            name:'Chat'
+            ,component:()=>import('./views/Chat.vue')
+            ,props:true
+            ,beforeEnter:(to) => {
+                if(!to.params.characterId){
+                    return {path:'/'};
+                }
+            }
+        }
     ]
 });
 
