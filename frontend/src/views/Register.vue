@@ -1,7 +1,7 @@
 <script>
 export default {
   name: "RegisterVue",
-  // 1. 新增：绑定表单数据（用于获取输入的密码和确认密码）
+  // 绑定表单数据（用于获取输入的密码和确认密码）
   data() {
     return {
       username: "",
@@ -45,7 +45,7 @@ export default {
     <h1>ArkSpeaking</h1>
     <div class="register-box">
       <p class="register-title">请注册</p>
-      <!-- 3. 修改：绑定表单提交事件（阻止默认提交，触发自定义验证） -->
+      <!-- 绑定表单提交事件（阻止默认提交，触发自定义验证） -->
       <form 
         ref="registerForm"
         action="/user/register" 
@@ -55,7 +55,7 @@ export default {
         <div class="user-input-container">
           <div class="input-username">
             <span>用户名 : </span>
-            <!-- 4. 修改：绑定 v-model 关联表单数据 -->
+            <!-- 绑定 v-model 关联表单数据 -->
             <input 
               type="text" 
               placeholder=" 请输入用户名" 
@@ -67,7 +67,7 @@ export default {
           </div>
           <div class="input-password">
             <span>密码 : </span>
-            <!-- 4. 修改：绑定 v-model 关联表单数据 -->
+            <!-- 绑定 v-model 关联表单数据 -->
             <input 
               type="password" 
               placeholder=" 请输入密码" 
@@ -79,7 +79,7 @@ export default {
           </div>
           <div class="input-password-confirm">
             <span>确认密码 : </span>
-            <!-- 4. 修改：绑定 v-model 关联表单数据 -->
+            <!-- 绑定 v-model 关联表单数据 -->
             <input 
               type="password" 
               placeholder=" 请再次输入密码" 
@@ -90,7 +90,7 @@ export default {
             />
           </div>
 
-          <!-- 5. 新增：错误提示（密码不一致时显示） -->
+          <!-- 错误提示（密码不一致时显示） -->
           <div class="error-tip">{{ passwordError }}</div>
 
           <button type="submit" class="register-button">注册</button>
