@@ -1,7 +1,5 @@
 package com.organization.utils;
 
-import java.io.NotActiveException;
-import java.lang.invoke.SerializedLambda;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -12,7 +10,7 @@ public class Md5Util {
             md.update(str.getBytes());
             byte[]byteDigest = md.digest();
             int i;
-            StringBuffer buf = new StringBuffer("");
+            StringBuilder buf = new StringBuilder("");
 
             for(int offset = 0; offset < byteDigest.length; offset++){
                 i = byteDigest[offset];
@@ -26,7 +24,7 @@ public class Md5Util {
             }
             return buf.toString();
         }   catch(NoSuchAlgorithmException e){
-            e.printStackTrace();
+            DebugLogger.logException("md5加密失败",e);
             return null;
         }
     }

@@ -41,5 +41,6 @@ backend/src/main/resources/application-*.yml
 backend/target/
 frontend/.env*
 /.env*
+runtime/
 
 接口文档.doc

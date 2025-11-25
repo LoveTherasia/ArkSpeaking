@@ -3,6 +3,9 @@ package com.organization;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,6 +32,7 @@ public class arkspeakingApplication {
         Map<String, Object> props = new HashMap<>();
         props.put("server.port", selectedPort);
         app.setDefaultProperties(props);
+        writeSelectedPort(selectedPort);
 
         // 5. 启动应用（传入命令行参数）
         app.run(args);
@@ -95,6 +99,20 @@ public class arkspeakingApplication {
         } catch (IOException e) {
             // 绑定失败（端口被占用/无权限）→ 端口不可用
             return false;
+        }
+    }
+
+    // 将选定端口写入项目根目录 runtime/port.json，供前端代理读取
+    private static void writeSelectedPort(int port) {
+        try {
+            Path root = Paths.get("").toAbsolutePath().getParent();
+            if (root == null) return;
+            Path dir = root.resolve("runtime");
+            Files.createDirectories(dir);
+            Path file = dir.resolve("port.json");
+            String content = "{\"port\":" + port + "}";
+            Files.writeString(file, content);
+        } catch (Exception ignored) {
         }
     }
 }

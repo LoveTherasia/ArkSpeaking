@@ -19,12 +19,12 @@ public class Result<T> {
     }
 
     //快速返回操作成功并返回空数据
-    public static Result success(){
+    public static Result<Void> success(){
         return new Result<>(0,"操作成功",null);
     }
 
     //返回操作失败
-    public static Result error(String message){
+    public static Result<Void> error(String message){
         return new Result<>(1,message,null);
     }
 }

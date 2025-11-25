@@ -35,39 +35,39 @@ export default {
 </script>
 
 <template>
-  <div class="home">
+  <div class="register-home">
+    <router-link class="home-link" to="/">首页</router-link>
     <h1>ArkSpeaking</h1>
-    <div class="login-box">
-      <p>请登录</p>
+    <div class="register-box">
+      <p class="register-title">请登录</p>
       <form ref="loginForm" action="/user/login" method="post" @submit.prevent="handleSubmit">
         <div class="user-input-container">
           <div class="input-username">
-            <span >用户名:</span>
-            <input type="text" placeholder="请输入用户名" class="user-input-place" name="username"/>
+            <span>用户名 : </span>
+            <input type="text" placeholder=" 请输入用户名" class="user-input-place" name="username"/>
           </div>
           <div class="input-password">
-            <span>密码:</span>
-            <input type="password" placeholder="请输入密码" class="user-input-place" name="password"/>
+            <span>密码 : </span>
+            <input type="password" placeholder=" 请输入密码" class="user-input-place" name="password"/>
           </div>
           <div class="error-tip">{{ passwordError }}</div>
-          <button type="submit" class="login-button">登录</button>
+          <button type="submit" class="register-button">登录</button>
         </div>
       </form>
 
       <router-link to="/user/register">还没有账号？去注册</router-link>
-      
     </div>
   </div>
 </template>
 
 <style scoped>
-.home{
+.register-home{
   width: 100vw;
   margin: 0;
   padding: 0;
 }
 
-.home::before{
+.register-home::before{
   content:"";
   position: absolute;
   top: 0;
@@ -81,25 +81,27 @@ export default {
   z-index: -1;
 }
 
-.home h1{
+.register-home h1{
   text-align:center;
   color: #fff;
 }
 
-.login-box{
-  width: 400px;
-  height: 300px;
+.register-title{
+  font-size: 24px;
+  margin-bottom: 2px;
+  color: #fff;
+  text-align: center;
+}
+
+.register-box{
+  width: 420px;
+  height: 380px;
   margin: 100px auto;
   background: rgba(0,0,0,0.5);
   border-radius: 10px;
   box-shadow: 0 0 10px rgba(0,0,0,0.5);
   padding: 20px;
   border-radius: 8px;
-}
-
-.home p{
-  text-align: center;
-  color: #fff;
 }
 
 .user-input-container{
@@ -127,7 +129,7 @@ export default {
   margin-left: 37px;
 }
 
-.login-button{
+.register-button{
   width: 100%;
   height: 40px;
   margin-top: 30px;
@@ -145,6 +147,20 @@ export default {
   margin-top: 10px;
   height: 20px;
   text-align: center;
+}
+
+.home-link{
+  position: absolute;
+  top: 12px;
+  left: 12px;
+}
+
+a{
+  color: #1E90FF;
+  text-decoration: none;
+  display: block;
+  text-align: center;
+  margin-top: 15px;
 }
 
 </style>
