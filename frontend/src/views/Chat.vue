@@ -22,6 +22,7 @@
     const messages = ref([]);//消息列表
     const inputMessage = ref("");//输入消息
     const messageContainer = ref(null);//消息容器
+    const userAvatar = "http://localhost:5173/src/assets/user.jpg"//角色头像
 
     //包装聊天信息
     const createChatMessage = (senderId,receiverId,content) =>{
@@ -192,7 +193,7 @@
                         <div class="character-box-avatar" :style="{ backgroundImage: `url(${character.avatar})` }"></div>
                         <div class="character-name">{{ character.name }}</div>
                     </div>
-                </div>
+                </div>  
             </div>
 
             <!-- 中间聊天部分 -->
@@ -204,8 +205,12 @@
                 </div>
 
                 <!-- 信息显示区域 -->
-                <div class="message-container">
+                <div class="message-container" ref="messageContainer">
                     <div v-for="(message, index) in messages" :key="index" :class="['message', message.sender === 'user' ? 'user-message' : 'ai-message']">
+                        <img :src=" message.sender === 'user' ? userAvatar : currentCharacter?.avatar " 
+                        alt="message.sender === user ? '我' : currentCharacter?.name "
+                        class="avatar">
+
                         <div class="message-content">{{ message.content }}</div>
                     </div>
                 </div>
@@ -393,4 +398,83 @@
     outline: none;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
 }
+/* 头像样式 */
+.avatar {
+  width: 44px; 
+  height: 44px;
+  border-radius: 50%; /* 圆形头像 */
+  overflow: hidden; /* 防止图片超出圆形 */
+  flex-shrink: 0; /* 固定尺寸，不被消息压缩 */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); 
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; 
+}
+
+/* -------------- 修改：消息容器 Flex 布局 -------------- */
+.message {
+  display: flex; /* 头像+消息气泡横向排列 */
+  align-items: flex-start; /* 顶部对齐（避免头像和长消息底部对齐） */
+  margin-bottom: 16px; /* 消息之间的间距，比之前稍大更美观 */
+  padding: 0 8px; /* 左右留白，避免贴边 */
+}
+
+/* -------------- 调整：用户消息（右侧+右头像） -------------- */
+.message.user-message {
+  flex-direction: row-reverse; /* 反转顺序：消息气泡在前，头像在后（视觉上右头像） */
+  justify-content: flex-start; /* 整体靠右对齐 */
+}
+
+/* 用户头像：左侧留间距（因反转顺序，margin-left 对应视觉右侧间距） */
+.message.user-message .avatar {
+  margin-left: 12px;
+}
+
+/* 用户消息气泡：去掉原有 margin-left: auto，Flex 已控制对齐 */
+.message.user-message .message-content {
+  color: #ffffff;
+  background-color: #4299e1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  max-width: 70%;
+  /* 去掉 margin-left: auto; 👇 */
+}
+
+/* -------------- 调整：角色消息（左侧+左头像） -------------- */
+.message.ai-message {
+  flex-direction: row; /* 正常顺序：头像在前，消息气泡在后（视觉上左头像） */
+  justify-content: flex-start; /* 整体靠左对齐 */
+}
+
+/* 角色头像：右侧留间距 */
+.message.ai-message .avatar {
+  margin-right: 12px;
+}
+
+/* 角色消息气泡：去掉原有 margin-right: auto，Flex 已控制对齐 */
+.message.ai-message .message-content {
+  color: #2d3748;
+  background-color: #e8f4f8;
+  padding: 8px 12px;
+  border-radius: 8px;
+  max-width: 70%;
+  /* 去掉 margin-right: auto; 👇 */
+}
+
+/* -------------- 优化：消息时间样式（可选，让时间更协调） -------------- */
+.message .message-time {
+  color: #718096;
+  font-size: 12px;
+  margin-top: 4px;
+  /* 让用户消息时间靠右，角色消息时间靠左 */
+  text-align: right;
+}
+.message.ai-message .message-time {
+  text-align: left;
+}
+
+/* 其他原有样式（如 .message-container、.input-area 等）不变 */
 </style>
