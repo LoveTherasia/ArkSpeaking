@@ -1,186 +1,185 @@
 <script setup>
-    //src/views/Chat.vue
-    //聊天页面设计
+//src/views/Chat.vue
+//聊天页面设计
 
-    //引入依赖
-    import {ref,onMounted,watch,nextTick} from 'vue';
-    import {useRoute,useRouter} from 'vue-router';
-    import { loadCharacter } from '@/utils/loadCharacter';
-    
-    import axios from 'axios';
-    // import { es } from 'element-plus/es/locale';
+//引入依赖
+import {ref,onMounted,watch,nextTick} from 'vue';
+import {useRoute,useRouter} from 'vue-router';
+import { loadCharacter } from '@/utils/loadCharacter';
 
-    axios.defaults.baseURL = 'http://localhost:8080';
+import axios from 'axios';
+// import { es } from 'element-plus/es/locale';
 
-    //路由相关
-    const route = useRoute();
-    const router = useRouter();
+axios.defaults.baseURL = 'http://localhost:8080';
 
-    //状态管理  
-    const characterList = ref([]);//角色列表
-    const currentCharacter = ref(null);//当前对话角色
-    const messages = ref([]);//消息列表
-    const inputMessage = ref("");//输入消息
-    const messageContainer = ref(null);//消息容器
-    const userAvatar = "http://localhost:5173/src/assets/user.jpg"//角色头像
+//路由相关
+const route = useRoute();
+const router = useRouter();
 
-    //包装聊天信息
-    const createChatMessage = (senderId,receiverId,content) =>{
-        return {
-            senderId:senderId,
-            receiverId:receiverId,
-            content:content
-        };
+//状态管理  
+const characterList = ref([]);//角色列表
+const currentCharacter = ref(null);//当前对话角色
+const messages = ref([]);//消息列表
+const inputMessage = ref("");//输入消息
+const messageContainer = ref(null);//消息容器
+const userAvatar = "http://localhost:5173/src/assets/user.jpg"//角色头像
+
+//包装聊天信息
+const createChatMessage = (senderId,receiverId,content) =>{
+    return {
+        senderId:senderId,
+        receiverId:receiverId,
+        content:content
     };
+};
 
-    //将聊天信息发送到后端存储
-    const saveChatMessage = async (message) => {
-        try{
-            await axios.post('/chat/save',message);
-            console.log("信息发送成功");
-        }catch(error){
-            console.error("信息存储失败",error);
-            alert("信息存储失败!");
-        }
+//将聊天信息发送到后端存储
+const saveChatMessage = async (message) => {
+    try{
+        await axios.post('/chat/save',message);
+        console.log("信息发送成功");
+    }catch(error){
+        console.error("信息存储失败",error);
+        alert("信息存储失败!");
     }
-    
-    //从后端加载本地的存储的聊天信息
-    const readChatMessage = async () => {
-        try{
-            const response = await axios.get("/chat/read",{
-                params:{
-                    characterId:currentCharacter.value.characterId
-                }
-            });
+}
 
-            const backendMessages = response.data || [];
-            console.log(backendMessages);
-            
-            messages.value = backendMessages.map(msg =>{
-                return {
-                    sender:msg.sendId === 'user' ? 'user' : 'ai',
-                    content:msg.content,
-                };
-            });
+//从后端加载本地的存储的聊天信息
+const readChatMessage = async () => {
+    try{
+        const response = await axios.get("/chat/read",{
+            params:{
+                characterId:currentCharacter.value.characterId
+            }
+        });
 
-            console.log("聊天记录加载成功",messages.value);
-            scrollToBottom();
-        }catch(error){
-            console.error("信息读取失败！",error.response?.data?.msg || error.message);
-            alert("信息读取失败!");
+        const backendMessages = response.data || [];
+        console.log(backendMessages);
+
+        messages.value = backendMessages.map(msg =>{
+            return {
+                sender:msg.sendId === 'user' ? 'user' : 'ai',
+                content:msg.content,
+            };
+        });
+
+        console.log("聊天记录加载成功",messages.value);
+        scrollToBottom();
+    }catch(error){
+        console.error("信息读取失败！",error.response?.data?.msg || error.message);
+        alert("信息读取失败!");
+    }
+};
+
+//加载角色数据
+onMounted(async () => {
+    characterList.value = await loadCharacter();
+    initCharacter();
+});
+
+//监听角色端口变化(用户切换对话角色)
+watch(
+    () => route.params.characterId,
+    async (newCharacterId) => {
+        if(!characterList.value.length) return;
+
+        const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
+        if(newCharacter){
+            currentCharacter.value = newCharacter;
+            await readChatMessage();
         }
-    };
+        else 
+        {
+            alert("不存在该角色" + newCharacterId);
+            route.push("/");
+        }
+    },
+    {immediate: true}
+);
 
-    //加载角色数据
-    onMounted(async () => {
-        characterList.value = await loadCharacter();
-        initCharacter();
+//初始化当前聊天角色
+const initCharacter = () => {
+    const targetId = route.params.characterId;
+    const character = characterList.value.find(item => item.characterId == targetId)
+    if(character){
+        currentCharacter.value = character;
+        readChatMessage();
+    }
+    else{
+        alert("不存在" + targetId);
+        router.push('/');
+    }
+}
+
+//发送聊天消息
+const sendMessage = () => {
+    if(!inputMessage.value.trim()){
+        alert("请输入消息内容！");
+        return ;
+    }
+
+    messages.value.push({
+        sender: 'user',
+        content: inputMessage.value.trim(),
+        time: new Date().toLocaleTimeString(),
     });
 
-    //监听角色端口变化(用户切换对话角色)
-    watch(
-        () => route.params.characterId,
-        async (newCharacterId) => {
-            if(!characterList.value.length) return;
-            
-            const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
-            if(newCharacter){
-                currentCharacter.value = newCharacter;
-                await readChatMessage();
-            }
-            else 
-            {
-                alert("不存在该角色" + newCharacterId);
-                route.push("/");
-            }
-        },
-        {immediate: true}
-    );
+    saveChatMessage({
+        sendId:'user',
+        chatId:currentCharacter.value.characterId,
+        content:inputMessage.value.trim(),
+    });
 
-    //初始化当前聊天角色
-    const initCharacter = () => {
-        const targetId = route.params.characterId;
-        const character = characterList.value.find(item => item.characterId == targetId)
-        if(character){
-            currentCharacter.value = character;
-            readChatMessage();
-        }
-        else{
-            alert("不存在" + targetId);
-            router.push('/');
-        }
-    }
+    inputMessage.value = "";//输出完之后清空输入框
+    scrollToBottom();//滚动到底部
 
-    //发送聊天消息
-    const sendMessage = () => {
-        if(!inputMessage.value.trim()){
-            alert("请输入消息内容！");
-            return ;
-        }
+    simulateAIResponse();//模拟AI回复
+}
+
+//此处模拟AI回复，以后要在这里接入后端API
+const simulateAIResponse = () => {
+    setTimeout(() => {
+        const reply = "这是AI的模拟回复";
 
         messages.value.push({
-            sender: 'user',
-            content: inputMessage.value.trim(),
+            sender: 'ai',
+            content: reply,
             time: new Date().toLocaleTimeString(),
         });
-
-        saveChatMessage({
-            sendId:'user',
-            chatId:currentCharacter.value.characterId,
-            content:inputMessage.value.trim(),
-        });
-
-        inputMessage.value = "";//输出完之后清空输入框
         scrollToBottom();//滚动到底部
 
-        simulateAIResponse();//模拟AI回复
+        saveChatMessage({
+            sendId:currentCharacter.value.characterId,
+            chatId:currentCharacter.value.characterId,
+            content:reply,
+        });
+    }, 1000);
+}
+
+//监听输入框，如果有回车就发送消息
+const handleKeyDown = (event) => {
+    if(event.key === 'Enter'){
+        event.preventDefault();
+        sendMessage();
     }
+}
 
-    //此处模拟AI回复，以后要在这里接入后端API
-    const simulateAIResponse = () => {
-        setTimeout(() => {
-            const reply = "这是AI的模拟回复";
-
-            messages.value.push({
-                sender: 'ai',
-                content: reply,
-                time: new Date().toLocaleTimeString(),
-            });
-            scrollToBottom();//滚动到底部
-
-            saveChatMessage({
-                sendId:currentCharacter.value.characterId,
-                chatId:currentCharacter.value.characterId,
-                content:reply,
-            });
-        }, 1000);
-    }
-
-    //监听输入框，如果有回车就发送消息
-    const handleKeyDown = (event) => {
-        if(event.key === 'Enter'){
-            event.preventDefault();
-            sendMessage();
+//滚动到底部
+const scrollToBottom = () => {
+    nextTick(() => {
+        if(messageContainer.value){
+            messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
         }
-    }
+    });
+}
 
-    //滚动到底部
-    const scrollToBottom = () => {
-        nextTick(() => {
-            if(messageContainer.value){
-                messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
-            }
-        });
-    }
-
-    //切换角色事件
-    const switchCharacter = (characterId) => {
-        router.push({
-            name: 'Chat',
-            params: { characterId },
-        });
-    }
-
+//切换角色事件
+const switchCharacter = (characterId) => {
+    router.push({
+        name: 'Chat',
+        params: { characterId },
+    });
+}
 </script>
 
 
@@ -356,34 +355,6 @@
     background-color: #f5f7fa; 
 }
 
-/* 信息区域文字颜色配置 */
-/* 用户发送的消息（右侧/自己） */
-.message.user-message .message-content {
-  color: #ffffff; /* 用户消息文字白色（搭配深色背景更清晰） */
-  background-color: #4299e1; /* 可选：给用户消息加蓝色气泡背景，增强区分度 */
-  padding: 8px 12px; /* 可选：增加内边距，让气泡更美观 */
-  border-radius: 8px; /* 可选：气泡圆角 */
-  max-width: 70%; /* 可选：限制消息宽度，避免过长 */
-  margin-left: auto; /* 可选：用户消息右对齐 */
-}
-
-/* AI发送的消息（左侧/对方） */
-.message.ai-message .message-content {
-  color: #2d3748; /* AI消息文字深灰色（默认，清晰易读） */
-  background-color: #e8f4f8; /* 可选：给AI消息加浅蓝背景，增强区分度 */
-  padding: 8px 12px; /* 可选：增加内边距 */
-  border-radius: 8px; /* 可选：气泡圆角 */
-  max-width: 70%; /* 可选：限制消息宽度 */
-  margin-right: auto; /* 可选：AI消息左对齐 */
-}
-
-/* 消息时间颜色（可选优化） */
-.message .message-time {
-  color: #718096; /* 时间文字浅灰色，不抢眼 */
-  font-size: 12px; /* 时间字体缩小 */
-  margin-top: 4px; /* 与内容拉开距离 */
-}
-
 .input-area {
     background-color:#f5f7fa; 
     display: block;
@@ -398,6 +369,7 @@
     outline: none;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
 }
+
 /* 头像样式 */
 .avatar {
   width: 44px; 
@@ -433,14 +405,13 @@
   margin-left: 12px;
 }
 
-/* 用户消息气泡：去掉原有 margin-left: auto，Flex 已控制对齐 */
+/* 用户消息气泡 */
 .message.user-message .message-content {
   color: #ffffff;
   background-color: #4299e1;
   padding: 8px 12px;
   border-radius: 8px;
   max-width: 70%;
-  /* 去掉 margin-left: auto; 👇 */
 }
 
 /* -------------- 调整：角色消息（左侧+左头像） -------------- */
@@ -454,14 +425,13 @@
   margin-right: 12px;
 }
 
-/* 角色消息气泡：去掉原有 margin-right: auto，Flex 已控制对齐 */
+/* 角色消息气泡 */
 .message.ai-message .message-content {
   color: #2d3748;
   background-color: #e8f4f8;
   padding: 8px 12px;
   border-radius: 8px;
   max-width: 70%;
-  /* 去掉 margin-right: auto; 👇 */
 }
 
 /* -------------- 优化：消息时间样式（可选，让时间更协调） -------------- */
@@ -475,6 +445,4 @@
 .message.ai-message .message-time {
   text-align: left;
 }
-
-/* 其他原有样式（如 .message-container、.input-area 等）不变 */
 </style>
