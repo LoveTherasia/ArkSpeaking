@@ -8,6 +8,7 @@
     import { loadCharacter } from '@/utils/loadCharacter';
     
     import axios from 'axios';
+    // import { es } from 'element-plus/es/locale';
 
     axios.defaults.baseURL = 'http://localhost:8080';
 
@@ -41,6 +42,33 @@
             alert("信息存储失败!");
         }
     }
+    
+    //从后端加载本地的存储的聊天信息
+    const readChatMessage = async () => {
+        try{
+            const response = await axios.get("/chat/read",{
+                params:{
+                    characterId:currentCharacter.value.characterId
+                }
+            });
+
+            const backendMessages = response.data || [];
+            console.log(backendMessages);
+            
+            messages.value = backendMessages.map(msg =>{
+                return {
+                    sender:msg.sendId === 'user' ? 'user' : 'ai',
+                    content:msg.content,
+                };
+            });
+
+            console.log("聊天记录加载成功",messages.value);
+            scrollToBottom();
+        }catch(error){
+            console.error("信息读取失败！",error.response?.data?.msg || error.message);
+            alert("信息读取失败!");
+        }
+    };
 
     //加载角色数据
     onMounted(async () => {
@@ -51,9 +79,19 @@
     //监听角色端口变化(用户切换对话角色)
     watch(
         () => route.params.characterId,
-        (newCharacterId) => {
+        async (newCharacterId) => {
             if(!characterList.value.length) return;
-            currentCharacter.value = characterList.value.find(c => c.characterId === newCharacterId) || null;
+            
+            const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
+            if(newCharacter){
+                currentCharacter.value = newCharacter;
+                await readChatMessage();
+            }
+            else 
+            {
+                alert("不存在该角色" + newCharacterId);
+                route.push("/");
+            }
         },
         {immediate: true}
     );
@@ -64,6 +102,7 @@
         const character = characterList.value.find(item => item.characterId == targetId)
         if(character){
             currentCharacter.value = character;
+            readChatMessage();
         }
         else{
             alert("不存在" + targetId);
