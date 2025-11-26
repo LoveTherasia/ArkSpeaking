@@ -8,7 +8,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { loadCharacter } from '@/utils/loadCharacter';
 import axios from 'axios';
 
-// 只引入 Loading 图标（不引入 ElLoading 组件！）
 import { Loading } from '@element-plus/icons-vue';
 
 axios.defaults.baseURL = 'http://localhost:8080';
@@ -61,7 +60,7 @@ const readChatMessage = async () => {
             }
         });
 
-        const backendMessages = response.data || [];
+        const backendMessages = Array.isArray(response.data) ? response.data : [];
         console.log(backendMessages);
 
         messages.value = backendMessages.map(msg => {
@@ -141,7 +140,7 @@ const sendMessage = () => {
     simulateAIResponse();//模拟AI回复
 }
 
-//此处模拟AI回复，【临时改短时间为2秒方便测试】
+//模拟AI回复
 const simulateAIResponse = () => {
     isLoading.value = true;
     console.log("加载中...", isLoading.value);
@@ -163,7 +162,7 @@ const simulateAIResponse = () => {
 
         isLoading.value = false;
         console.log("加载结束", isLoading.value);
-    }, 2000); // 原200000ms改为2000ms（2秒），测试完可改回
+    }, 2000);
 }
 
 //监听输入框，如果有回车就发送消息
