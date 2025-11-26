@@ -3,12 +3,13 @@
 //聊天页面设计
 
 //引入依赖
-import {ref,onMounted,watch,nextTick} from 'vue';
-import {useRoute,useRouter} from 'vue-router';
+import { ref, onMounted, watch, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { loadCharacter } from '@/utils/loadCharacter';
-
 import axios from 'axios';
-// import { es } from 'element-plus/es/locale';
+
+// 只引入 Loading 图标（不引入 ElLoading 组件！）
+import { Loading } from '@element-plus/icons-vue';
 
 axios.defaults.baseURL = 'http://localhost:8080';
 
@@ -22,51 +23,58 @@ const currentCharacter = ref(null);//当前对话角色
 const messages = ref([]);//消息列表
 const inputMessage = ref("");//输入消息
 const messageContainer = ref(null);//消息容器
-const userAvatar = "http://localhost:5173/src/assets/user.jpg"//角色头像
+const userAvatar = "http://localhost:5173/src/assets/user.jpg";//角色头像
+
+const isLoading = ref(false);
+
+// 【调试用】手动切换加载状态（快速验证）
+const testLoading = () => {
+  isLoading.value = !isLoading.value;
+};
 
 //包装聊天信息
-const createChatMessage = (senderId,receiverId,content) =>{
+const createChatMessage = (senderId, receiverId, content) => {
     return {
-        senderId:senderId,
-        receiverId:receiverId,
-        content:content
+        senderId: senderId,
+        receiverId: receiverId,
+        content: content
     };
 };
 
 //将聊天信息发送到后端存储
 const saveChatMessage = async (message) => {
-    try{
-        await axios.post('/chat/save',message);
+    try {
+        await axios.post('/chat/save', message);
         console.log("信息发送成功");
-    }catch(error){
-        console.error("信息存储失败",error);
+    } catch (error) {
+        console.error("信息存储失败", error);
         alert("信息存储失败!");
     }
 }
 
 //从后端加载本地的存储的聊天信息
 const readChatMessage = async () => {
-    try{
-        const response = await axios.get("/chat/read",{
-            params:{
-                characterId:currentCharacter.value.characterId
+    try {
+        const response = await axios.get("/chat/read", {
+            params: {
+                characterId: currentCharacter.value?.characterId
             }
         });
 
         const backendMessages = response.data || [];
         console.log(backendMessages);
 
-        messages.value = backendMessages.map(msg =>{
+        messages.value = backendMessages.map(msg => {
             return {
-                sender:msg.sendId === 'user' ? 'user' : 'ai',
-                content:msg.content,
+                sender: msg.sendId === 'user' ? 'user' : 'ai',
+                content: msg.content,
             };
         });
 
-        console.log("聊天记录加载成功",messages.value);
+        console.log("聊天记录加载成功", messages.value);
         scrollToBottom();
-    }catch(error){
-        console.error("信息读取失败！",error.response?.data?.msg || error.message);
+    } catch (error) {
+        console.error("信息读取失败！", error.response?.data?.msg || error.message);
         alert("信息读取失败!");
     }
 };
@@ -81,31 +89,28 @@ onMounted(async () => {
 watch(
     () => route.params.characterId,
     async (newCharacterId) => {
-        if(!characterList.value.length) return;
+        if (!characterList.value.length) return;
 
         const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
-        if(newCharacter){
+        if (newCharacter) {
             currentCharacter.value = newCharacter;
             await readChatMessage();
-        }
-        else 
-        {
+        } else {
             alert("不存在该角色" + newCharacterId);
-            route.push("/");
+            router.push("/");
         }
     },
-    {immediate: true}
+    { immediate: true }
 );
 
 //初始化当前聊天角色
 const initCharacter = () => {
     const targetId = route.params.characterId;
     const character = characterList.value.find(item => item.characterId == targetId)
-    if(character){
+    if (character) {
         currentCharacter.value = character;
         readChatMessage();
-    }
-    else{
+    } else {
         alert("不存在" + targetId);
         router.push('/');
     }
@@ -113,9 +118,9 @@ const initCharacter = () => {
 
 //发送聊天消息
 const sendMessage = () => {
-    if(!inputMessage.value.trim()){
+    if (!inputMessage.value.trim()) {
         alert("请输入消息内容！");
-        return ;
+        return;
     }
 
     messages.value.push({
@@ -125,9 +130,9 @@ const sendMessage = () => {
     });
 
     saveChatMessage({
-        sendId:'user',
-        chatId:currentCharacter.value.characterId,
-        content:inputMessage.value.trim(),
+        sendId: 'user',
+        chatId: currentCharacter.value.characterId,
+        content: inputMessage.value.trim(),
     });
 
     inputMessage.value = "";//输出完之后清空输入框
@@ -136,8 +141,10 @@ const sendMessage = () => {
     simulateAIResponse();//模拟AI回复
 }
 
-//此处模拟AI回复，以后要在这里接入后端API
+//此处模拟AI回复，【临时改短时间为2秒方便测试】
 const simulateAIResponse = () => {
+    isLoading.value = true;
+    console.log("加载中...", isLoading.value);
     setTimeout(() => {
         const reply = "这是AI的模拟回复";
 
@@ -149,16 +156,19 @@ const simulateAIResponse = () => {
         scrollToBottom();//滚动到底部
 
         saveChatMessage({
-            sendId:currentCharacter.value.characterId,
-            chatId:currentCharacter.value.characterId,
-            content:reply,
+            sendId: currentCharacter.value.characterId,
+            chatId: currentCharacter.value.characterId,
+            content: reply,
         });
-    }, 1000);
+
+        isLoading.value = false;
+        console.log("加载结束", isLoading.value);
+    }, 2000); // 原200000ms改为2000ms（2秒），测试完可改回
 }
 
 //监听输入框，如果有回车就发送消息
 const handleKeyDown = (event) => {
-    if(event.key === 'Enter'){
+    if (event.key === 'Enter') {
         event.preventDefault();
         sendMessage();
     }
@@ -167,7 +177,7 @@ const handleKeyDown = (event) => {
 //滚动到底部
 const scrollToBottom = () => {
     nextTick(() => {
-        if(messageContainer.value){
+        if (messageContainer.value) {
             messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
         }
     });
@@ -185,44 +195,62 @@ const switchCharacter = (characterId) => {
 
 <template>
     <div class="Chat-home">
-            <!-- 角色聊天列表 -->
-            <div class="left">
-                <div class="character-card" v-for="character in characterList" :key="character.id" @click="switchCharacter(character.characterId)" :class="{ active: currentCharacter && currentCharacter.characterId === character.characterId }">
-                    <div>
-                        <div class="character-box-avatar" :style="{ backgroundImage: `url(${character.avatar})` }"></div>
-                        <div class="character-name">{{ character.name }}</div>
-                    </div>
-                </div>  
+        <!-- 角色聊天列表 -->
+        <div class="left">
+            <div class="character-card" v-for="character in characterList" :key="character.id" @click="switchCharacter(character.characterId)" :class="{ active: currentCharacter && currentCharacter.characterId === character.characterId }">
+                <div>
+                    <div class="character-box-avatar" :style="{ backgroundImage: `url(${character.avatar})` }"></div>
+                    <div class="character-name">{{ character.name }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 中间聊天部分 -->
+        <div class="main">
+            <!-- 头部显示区域 -->
+            <div class="header">
+                <p>{{ currentCharacter ? currentCharacter.name : '' }}</p>
             </div>
 
-            <!-- 中间聊天部分 -->
-            <div class="main">
-                <!-- 头部显示区域 -->
-                <div class="header">
-                    <!-- 此处暂时只显示角色名称，后续要实现群聊功能的时候再进行优化 -->
-                     <p>{{ currentCharacter ? currentCharacter.name : '' }}</p>
-                </div>
-
-                <!-- 信息显示区域 -->
-                <div class="message-container" ref="messageContainer">
-                    <div v-for="(message, index) in messages" :key="index" :class="['message', message.sender === 'user' ? 'user-message' : 'ai-message']">
-                        <img :src=" message.sender === 'user' ? userAvatar : currentCharacter?.avatar " 
+            <!-- 信息显示区域 -->
+            <div class="message-container" ref="messageContainer">
+                <!-- 原有消息列表 -->
+                <div v-for="(message, index) in messages" :key="index" :class="['message', message.sender === 'user' ? 'user-message' : 'ai-message']">
+                    <img :src="message.sender === 'user' ? userAvatar : currentCharacter?.avatar"
                         alt="message.sender === user ? '我' : currentCharacter?.name "
                         class="avatar">
-
-                        <div class="message-content">{{ message.content }}</div>
-                    </div>
+                    <div class="message-content">{{ message.content }}</div>
                 </div>
 
-                <!-- 输入区域 -->
-                <textarea v-model="inputMessage" :placeholder="`快来和${currentCharacter?.name || 角色}聊天吧，博士~`" class="input-area" @keydown="handleKeyDown"></textarea>
+                <!-- 加载状态 -->
+                <div class="ai-loading" v-if="isLoading">
+                    <img :src="currentCharacter?.avatar || userAvatar" alt="加载中" class="avatar">
+                    <div class="loading-container">
+                        <!-- Loading图标 + 旋转动画 -->
+                        <Loading class="loading-icon" />
+                        <span class="loading-text">{{ currentCharacter?.name || 'AI' }}正在思考...</span>
+                    </div>
+                </div>
             </div>
 
-            <!-- 右侧角色设定展示区域 -->
+            <!-- 输入区域 -->
+            <textarea 
+                v-model="inputMessage" 
+                :placeholder="`快来和${currentCharacter?.name || '角色'}聊天吧，博士~`" 
+                class="input-area" 
+                @keydown="handleKeyDown"
+                :disabled="isLoading"
+            ></textarea>
+        </div>
 
-            <div class="right">
-                这里是角色设定区域
-            </div>
+        <!-- 右侧角色设定展示区域 -->
+        <div class="right">
+            这里是角色设定区域
+            <!-- 【调试按钮】手动切换加载状态（快速验证） -->
+            <button @click="testLoading" style="margin-top:20px;padding:8px 16px;cursor:pointer;">
+                测试加载状态
+            </button>
+        </div>
     </div>
 </template>
 
@@ -241,11 +269,11 @@ const switchCharacter = (characterId) => {
 .left {
     width: 10vw;
     min-height: 100vh;
-    background-color: #f5f7fa; 
-    padding: 16px 8px; 
+    background-color: #f5f7fa;
+    padding: 16px 8px;
     display: flex;
     flex-direction: column;
-    gap: 12px; 
+    gap: 12px;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
     overflow-y: auto;
     border-right: 1px solid #908f8f6a;
@@ -253,97 +281,96 @@ const switchCharacter = (characterId) => {
 
 /* 角色卡片样式优化 */
 .character-card {
-    width: 100%; 
-    height: 100px; 
-    background-color: #d1d1d1; 
-    border-radius: 12px; 
+    width: 100%;
+    height: 100px;
+    background-color: #d1d1d1;
+    border-radius: 12px;
     display: flex;
-    align-items: center; 
-    padding: 0 16px; 
+    align-items: center;
+    padding: 0 16px;
     box-sizing: border-box;
     transition: all 0.25s ease; /* 过渡效果 */
 }
 
 .character-card.active {
-    background-color: #e8f4f8; 
-    border: 1px solid #4299e1; 
+    background-color: #e8f4f8;
+    border: 1px solid #4299e1;
 }
 
 .character-card:hover {
-    transform: scale(1.02); 
+    transform: scale(1.02);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* hover阴影增强 */
     background-color: #fafafa; /* hover时轻微变色 */
 }
 
-/* 角色内容容器优化 */
+/* 角色内容容器 */
 .character-card > div {
     display: flex;
     flex-direction: column;
-    align-items:flex-start; 
+    align-items: flex-start;
     width: 20px;
     height: 100%;
-    gap: 12px; 
+    gap: 12px;
     cursor: pointer;
 }
 
-/* 头像样式优化 */
+/* 头像样式 */
 .character-box-avatar {
-    width: 56px; 
+    width: 56px;
     height: 56px;
     background-size: cover;
-    background-position: center; 
+    background-position: center;
     border-radius: 50%;
-    border: 2px solid #ffffff; 
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); 
-    flex-shrink: 0; 
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
 }
 
-/* 角色名称样式优化 */
+/* 角色名称样式 */
 .character-name {
-    font-size: 16px; /* 字体大小适中 */
+    font-size: 16px; 
     font-weight: 500;
-    color: #2d3748; /* 深灰色文字，更易读 */
+    color: #2d3748; 
     padding: 0;
-    text-align: left; /* 左对齐更符合阅读习惯 */
+    text-align: left; 
     white-space: nowrap; /* 防止文字换行 */
     overflow: hidden; /* 超出部分隐藏 */
     text-overflow: ellipsis; /* 超出显示省略号 */
-    flex: 1; /* 文字区域自适应 */
+    flex: 1; 
 }
 
-.main{
+.main {
     width: 70vw;
     min-height: 100vh;
     box-sizing: border-box;
     overflow-y: auto;
 }
 
-.right{
+.right {
     width: 20vw;
     min-height: 100vh;
-    background-color: #5494f4; 
+    background-color: #5494f4;
     padding: 16px;
     box-sizing: border-box;
-    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.05); 
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.05);
     overflow-y: auto;
 }
 
-.header{
+.header {
     width: 100%;
     height: 60px;
     border-bottom: 1px solid #e2e8f0;
-    background-color: #f5f7fa; 
+    background-color: #f5f7fa;
     /* 设置边框 */
     border-bottom: 1px solid #908f8f6a;
     border-left: 1px solid #908f8f6a;
 }
 
-.header p{
+.header p {
     font-size: 20px;
     font-weight: bold;
     line-height: 60px;
     margin-left: 16px;
-    /* 单独设置文字颜色 */
     color: #2d3748;
 }
 
@@ -352,11 +379,11 @@ const switchCharacter = (characterId) => {
     overflow-y: auto;
     padding: 16px;
     box-sizing: border-box;
-    background-color: #f5f7fa; 
+    background-color: #f5f7fa;
 }
 
 .input-area {
-    background-color:#f5f7fa; 
+    background-color: #f5f7fa;
     display: block;
     height: 140px;
     width: 100%;
@@ -372,77 +399,107 @@ const switchCharacter = (characterId) => {
 
 /* 头像样式 */
 .avatar {
-  width: 44px; 
-  height: 44px;
-  border-radius: 50%; /* 圆形头像 */
-  overflow: hidden; /* 防止图片超出圆形 */
-  flex-shrink: 0; /* 固定尺寸，不被消息压缩 */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); 
+    width: 44px;
+    height: 44px;
+    border-radius: 50%; /* 圆形头像 */
+    overflow: hidden; /* 防止图片超出圆形 */
+    flex-shrink: 0; 
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover; 
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
-/* -------------- 修改：消息容器 Flex 布局 -------------- */
+/* 信息界面布局 */
 .message {
-  display: flex; /* 头像+消息气泡横向排列 */
-  align-items: flex-start; /* 顶部对齐（避免头像和长消息底部对齐） */
-  margin-bottom: 16px; /* 消息之间的间距，比之前稍大更美观 */
-  padding: 0 8px; /* 左右留白，避免贴边 */
+    display: flex; 
+    align-items: flex-start; 
+    margin-bottom: 16px; 
+    padding: 0 8px; 
 }
 
-/* -------------- 调整：用户消息（右侧+右头像） -------------- */
+/* 用户信息 */
 .message.user-message {
-  flex-direction: row-reverse; /* 反转顺序：消息气泡在前，头像在后（视觉上右头像） */
-  justify-content: flex-start; /* 整体靠右对齐 */
+    flex-direction: row-reverse; 
+    justify-content: flex-start; 
 }
 
-/* 用户头像：左侧留间距（因反转顺序，margin-left 对应视觉右侧间距） */
 .message.user-message .avatar {
-  margin-left: 12px;
+    margin-left: 12px;
 }
 
-/* 用户消息气泡 */
 .message.user-message .message-content {
-  color: #ffffff;
-  background-color: #4299e1;
-  padding: 8px 12px;
-  border-radius: 8px;
-  max-width: 70%;
+    color: #ffffff;
+    background-color: #4299e1;
+    padding: 8px 12px;
+    border-radius: 8px;
+    max-width: 70%;
 }
 
-/* -------------- 调整：角色消息（左侧+左头像） -------------- */
 .message.ai-message {
-  flex-direction: row; /* 正常顺序：头像在前，消息气泡在后（视觉上左头像） */
-  justify-content: flex-start; /* 整体靠左对齐 */
+    flex-direction: row; 
+    justify-content: flex-start;
 }
 
-/* 角色头像：右侧留间距 */
 .message.ai-message .avatar {
-  margin-right: 12px;
+    margin-right: 12px;
 }
 
-/* 角色消息气泡 */
 .message.ai-message .message-content {
-  color: #2d3748;
-  background-color: #e8f4f8;
-  padding: 8px 12px;
-  border-radius: 8px;
-  max-width: 70%;
+    color: #2d3748;
+    background-color: #e8f4f8;
+    padding: 8px 12px;
+    border-radius: 8px;
+    max-width: 70%;
 }
 
-/* -------------- 优化：消息时间样式（可选，让时间更协调） -------------- */
-.message .message-time {
-  color: #718096;
-  font-size: 12px;
-  margin-top: 4px;
-  /* 让用户消息时间靠右，角色消息时间靠左 */
-  text-align: right;
+/* 加载状态样式 */
+.ai-loading {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 0 8px;
 }
-.message.ai-message .message-time {
-  text-align: left;
+
+.loading-container {
+    background-color: #e8f4f8;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px; /* 确保不会被压缩 */
+}
+
+/* Loading图标旋转动画 */
+.loading-icon {
+    width: 18px;
+    height: 18px;
+    color: #4299e1;
+    animation: rotate 1.5s linear infinite; /* 旋转动画 */
+}
+
+/* 加载文字 */
+.loading-text {
+    font-size: 14px;
+    color: #4a5568;
+    line-height: 1;
+}
+
+/* 旋转动画关键帧 */
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 禁用状态的输入框样式 */
+.input-area:disabled {
+    background-color: #f0f2f5;
+    cursor: not-allowed;
+    color: #9ca3af;
 }
 </style>
