@@ -20,6 +20,7 @@ public class ReadMessageServiceImpl implements ReadMessageService{
     private final JsonFileReader jsonFileReader = new JsonFileReader();
 
     public List<ChatMessage> readChatMessage(String characterId) throws IOException {
+        System.out.println(characterId);
         return jsonFileReader.readMessages("Chat/" + characterId + ".json");
     }
 }

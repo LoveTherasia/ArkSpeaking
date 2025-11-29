@@ -78,6 +78,22 @@ const readChatMessage = async () => {
     }
 };
 
+//尝试调用后端爬取数据代码
+const fetchData = async () => {
+    console.log(currentCharacter.value?.name);
+    try{
+        const response = await axios.get("/chat/fetch",{
+            params:{
+                characterName: currentCharacter.value?.name
+            }
+        });
+        console.log(response.data);
+    } catch (error) {
+        console.error("信息读取失败！", error.response?.data?.msg || error.message);
+        alert("信息读取失败!");
+    }
+};
+
 //加载角色数据
 onMounted(async () => {
     characterList.value = await loadCharacter();
@@ -93,6 +109,7 @@ watch(
         const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
         if (newCharacter) {
             currentCharacter.value = newCharacter;
+            await fetchData();
             await readChatMessage();
         } else {
             alert("不存在该角色" + newCharacterId);
@@ -109,6 +126,7 @@ const initCharacter = () => {
     if (character) {
         currentCharacter.value = character;
         readChatMessage();
+        fetchData();
     } else {
         alert("不存在" + targetId);
         router.push('/');
@@ -202,6 +220,10 @@ const switchCharacter = (characterId) => {
                     <div class="character-name">{{ character.name }}</div>
                 </div>
             </div>
+
+            <button @click="testLoading" style="margin-top:20px;padding:8px 16px;cursor:pointer;">
+                    测试加载状态
+            </button>
         </div>
 
         <!-- 中间聊天部分 -->
@@ -244,11 +266,11 @@ const switchCharacter = (characterId) => {
 
         <!-- 右侧角色设定展示区域 -->
         <div class="right">
-            这里是角色设定区域
-            <!-- 【调试按钮】手动切换加载状态（快速验证） -->
-            <button @click="testLoading" style="margin-top:20px;padding:8px 16px;cursor:pointer;">
-                测试加载状态
-            </button>
+            <div class="character-information">
+                <div class="character-image">
+                     <img :src="currentCharacter?.avatar" alt="currentCharacter?.name " class="character-information-avatar">
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -342,16 +364,6 @@ const switchCharacter = (characterId) => {
     width: 70vw;
     min-height: 100vh;
     box-sizing: border-box;
-    overflow-y: auto;
-}
-
-.right {
-    width: 20vw;
-    min-height: 100vh;
-    background-color: #5494f4;
-    padding: 16px;
-    box-sizing: border-box;
-    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.05);
     overflow-y: auto;
 }
 
@@ -500,5 +512,32 @@ const switchCharacter = (characterId) => {
     background-color: #f0f2f5;
     cursor: not-allowed;
     color: #9ca3af;
+}
+
+/* 角色信息卡片 */
+
+.right {
+    width: 20vw;
+    min-height: 100vh;
+    background-color: #ededed;
+    padding: 0;
+    box-sizing: border-box;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.05);
+    overflow-y: auto;
+}
+
+.character-information{
+    width: 100%;
+    height: 100%;
+    background-color: #92fbd125;
+    border-left: 1px solid #908f8f6a;
+}
+
+.character-image{
+    width: 80%;
+}
+
+.character-information-avatar{
+    width: 100%;
 }
 </style>

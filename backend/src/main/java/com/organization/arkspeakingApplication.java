@@ -18,14 +18,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 public class arkspeakingApplication {
-
     // 程序入口方法
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         // 1. 获取首选端口（优先级：环境变量APP_PORT > 系统属性server.port > 默认8081）
         int basePort = getBasePort();
         // 2. 从首选端口开始，查找第一个可用端口（最多扫描后续50个端口）
         int selectedPort = findAvailablePort(basePort);
-
+    
         // 3. 创建Spring Boot应用实例
         SpringApplication app = new SpringApplication(arkspeakingApplication.class);
         // 4. 封装动态获取的端口，设置为应用默认配置（覆盖默认8080端口）
