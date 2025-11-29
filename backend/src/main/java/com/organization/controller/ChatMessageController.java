@@ -1,6 +1,8 @@
 package com.organization.controller;
 
+import com.organization.pojo.CharacterInformation;
 import com.organization.pojo.ChatMessage;
+import com.organization.service.LoadCharacterInformationService;
 import com.organization.service.ReadMessageService;
 import com.organization.service.SaveMessageService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +20,9 @@ public class ChatMessageController {
 
     @Autowired
     private ReadMessageService readMessageService;
+
+    @Autowired
+    private LoadCharacterInformationService loadCharacterInformationService;
 
     @PostMapping("/save")
     public void saveChatMessage(@RequestBody ChatMessage chatMessage) {
@@ -38,5 +43,14 @@ public class ChatMessageController {
         }
         readMessageService.readChatMessage(characterId);
         return chatMessages;
+    }
+
+    //加载角色设定信息
+    @GetMapping("/fetch")
+    public void fetchInformation(String characterName){
+        //首先先检验本地文件里是否有该角色设定
+
+        //如果本地里没有该角色设定，尝试调用服务层方法调用prts的API获取角色设定
+        loadCharacterInformationService.loadCharacterInformation(characterName);
     }
 }

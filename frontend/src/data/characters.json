@@ -19,5 +19,19 @@
     "characterId": "goldenglow",
     "avatar": "../assets/goldenglow-01.jpg",
     "route": "/chat/goldenglow"
+  },
+  {
+    "id": 4,
+    "name": "特蕾西娅",
+    "characterId": "theresa",
+    "avatar": "../assets/theresa-01.jpg",
+    "route": "/chat/theresa"
+  },
+  {
+    "id": 5,
+    "name": "羽毛笔",
+    "characterId": "La pluma",
+    "avatar": "../assets/La pluma-01.jpg",
+    "route": "/chat/La pluma"
   }
 ]

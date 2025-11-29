@@ -12,12 +12,10 @@ headers = {
 }
 
 def sanitize_filename(filename):
-    """清理文件名中的非法字符"""
     illegal_chars = r'[\/:*?"<>|]'
     return re.sub(illegal_chars, '_', filename)
 
 def remove_trailing_commas(js_str):
-    """移除JS对象/数组的尾逗号"""
     while True:
         new_js = re.sub(r',\s*([}\]])', r'\1', js_str)
         if new_js == js_str:
@@ -26,7 +24,6 @@ def remove_trailing_commas(js_str):
     return js_str
 
 def parse_js_object(js_code):
-    """解析JavaScript对象为Python字典"""
     parser = PyJsParser()
     try:
         ast = parser.parse(f"var temp = {js_code};")
@@ -63,13 +60,12 @@ def get_html():
     url = f'https://prts.wiki/w/{characterName}'
 
     try:
-        # 2. 发送请求
+        # 发送请求
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         response.encoding = 'utf-8'
 
-        # ========== 核心修复：精准提取完整的char_info对象 ==========
-        # 步骤1：匹配char_info={...}的基础结构（不限制终止符）
+        # 匹配char_info={...}的基础结构
         pattern = r'var char_info=(\{[\s\S]*?\});'
         match = re.search(pattern, response.text)
         if not match:
@@ -79,7 +75,7 @@ def get_html():
                 f.write(response.text)
             sys.exit(1)
 
-        # 步骤2：用栈结构匹配成对大括号（解决嵌套截断问题）
+        #用栈结构匹配成对大括号
         char_info_raw = match.group(1)
         def get_full_js_object(js_str):
             stack = []
@@ -99,7 +95,7 @@ def get_html():
         # 提取完整的JS对象字符串
         char_info_js_str = get_full_js_object(char_info_raw).strip()
 
-        # 步骤3：清理注释、尾逗号（基础预处理）
+        # 清理注释、尾逗号
         char_info_js_str = re.sub(r'//.*?\n', '\n', char_info_js_str)  # 移除单行注释
         char_info_js_str = re.sub(r'/\*[\s\S]*?\*/', '', char_info_js_str)  # 移除多行注释
         char_info_js_str = re.sub(r'\s+', ' ', char_info_js_str)  # 合并多余空格
