@@ -92,6 +92,7 @@ def get_html():
         pattern = r'var char_info=(\{[\s\S]*?\});'
         match = re.search(pattern, response.text)
         if not match:
+            print(soup)
             result["error"] = "错误：未找到char_info数据（基础匹配失败）"
             print(f"###JSON_START###{json.dumps(result, ensure_ascii=False)}###JSON_END###")
             safe_filename = sanitize_filename(characterName)

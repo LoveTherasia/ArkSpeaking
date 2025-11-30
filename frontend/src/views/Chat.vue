@@ -43,7 +43,11 @@ const createChatMessage = (senderId, receiverId, content) => {
 //将聊天信息发送到后端存储
 const saveChatMessage = async (message) => {
     try {
-        await axios.post('/chat/save', message);
+        await axios.post('/chat/save', {
+            sendId: message.senderId,
+            receiveId: message.receiverId,
+            content: message.content
+        });
         console.log("信息发送成功");
     } catch (error) {
         console.error("信息存储失败", error);
@@ -53,6 +57,7 @@ const saveChatMessage = async (message) => {
 
 //从后端加载本地的存储的聊天信息
 const readChatMessage = async () => {
+    if(!currentCharacter.value) return;
     try {
         const response = await axios.get("/chat/read", {
             params: {
@@ -63,12 +68,10 @@ const readChatMessage = async () => {
         const backendMessages = Array.isArray(response.data) ? response.data : [];
         console.log(backendMessages);
 
-        messages.value = backendMessages.map(msg => {
-            return {
-                sender: msg.sendId === 'user' ? 'user' : 'ai',
-                content: msg.content,
-            };
-        });
+        messages.value = backendMessages.map(msg => ({
+            sender:msg.sendId === currentCharacter.value?.characterId ? 'user' : 'ai',
+            content: msg.content,
+        }))
 
         console.log("聊天记录加载成功", messages.value);
         scrollToBottom();
@@ -97,8 +100,7 @@ const fetchData = async () => {
 //加载角色数据
 onMounted(async () => {
     characterList.value = await loadCharacter();
-    initCharacter();
-});
+}); 
 
 //监听角色端口变化(用户切换对话角色)
 watch(
@@ -106,32 +108,21 @@ watch(
     async (newCharacterId) => {
         if (!characterList.value.length) return;
 
+        //查找新角色
         const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
-        if (newCharacter) {
-            currentCharacter.value = newCharacter;
-            await fetchData();
-            await readChatMessage();
-        } else {
+        if(!newCharacter){
             alert("不存在该角色" + newCharacterId);
             router.push("/");
+            return;
         }
+
+        currentCharacter.value = newCharacter;
+        await readChatMessage();
+        await fetchData();
+        console.log("当前角色:", currentCharacter.value);
     },
     { immediate: true }
 );
-
-//初始化当前聊天角色
-const initCharacter = () => {
-    const targetId = route.params.characterId;
-    const character = characterList.value.find(item => item.characterId == targetId)
-    if (character) {
-        currentCharacter.value = character;
-        readChatMessage();
-        fetchData();
-    } else {
-        alert("不存在" + targetId);
-        router.push('/');
-    }
-}
 
 //发送聊天消息
 const sendMessage = () => {
