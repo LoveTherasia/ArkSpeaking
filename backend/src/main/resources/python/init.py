@@ -5,6 +5,7 @@ import re
 import json
 from pathlib import Path
 from pyjsparser import PyJsParser
+from bs4 import BeautifulSoup
 
 # 自定义请求头
 headers = {
@@ -45,37 +46,60 @@ def parse_js_object(js_code):
     except Exception as e:
         raise ValueError(f"JS对象解析失败：{str(e)}")
 
+# 文本清洗函数（去除多余空格、换行、制表符）
+def clean_text(text):
+    if not text:
+        return ""
+    return re.sub(r'\s+', ' ', text).strip()
+
+# 提取干员的档案内容（修复索引顺序和越界）
+def extract_poem_content(soup):
+    poem_div = soup.find_all("div",class_="poem")
+    position = [10,12,14,16]  # 列表保证顺序，对应0-3
+    file_data = {}
+    for idx, pos in enumerate(position):
+        file_data[idx] = clean_text(poem_div[pos].text) if pos < len(poem_div) else ""
+
+    experience = clean_text(poem_div[6].text) if len(poem_div) > 6 else ""
+    level_up = clean_text(poem_div[18].text) if len(poem_div) > 18 else ""
+    return file_data, experience, level_up
+
 def get_html():
-    # 1. 处理命令行参数
-    if len(sys.argv) < 2:
-        print("错误：请传入干员名称作为参数，例如：python script.py 阿米娅")
-        sys.exit(1)
-
-    characterName = sys.argv[1].strip()
-    if not characterName:
-        print("错误：干员名称不能为空")
-        sys.exit(1)
-
-    print(f"正在爬取干员：{characterName}")
-    url = f'https://prts.wiki/w/{characterName}'
-
+    # 初始化返回结果
+    result = {"error": None}
     try:
-        # 发送请求
+        if len(sys.argv) < 2:
+            result["error"] = "错误：请传入干员名称"
+            print(f"###JSON_START###{json.dumps(result, ensure_ascii=False)}###JSON_END###")
+            sys.exit(1)
+
+        characterName = sys.argv[1].strip()
+        if not characterName:
+            result["error"] = "错误：干员名称不能为空"
+            print(f"###JSON_START###{json.dumps(result, ensure_ascii=False)}###JSON_END###")
+            sys.exit(1)
+
+        url = f'https://prts.wiki/w/{characterName}'
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         response.encoding = 'utf-8'
 
-        # 匹配char_info={...}的基础结构
+        # 解析档案数据
+        soup = BeautifulSoup(response.text, 'html.parser')
+        file_data, experience, level_up = extract_poem_content(soup)
+
+        # 匹配char_info
         pattern = r'var char_info=(\{[\s\S]*?\});'
         match = re.search(pattern, response.text)
         if not match:
-            print("错误：未找到char_info数据（基础匹配失败）")
+            result["error"] = "错误：未找到char_info数据（基础匹配失败）"
+            print(f"###JSON_START###{json.dumps(result, ensure_ascii=False)}###JSON_END###")
             safe_filename = sanitize_filename(characterName)
             with open(f"{safe_filename}_debug.html", 'w', encoding='utf-8') as f:
                 f.write(response.text)
             sys.exit(1)
 
-        #用栈结构匹配成对大括号
+        # 提取并清洗JS对象
         char_info_raw = match.group(1)
         def get_full_js_object(js_str):
             stack = []
@@ -87,55 +111,50 @@ def get_html():
                 elif char == '}':
                     if stack:
                         stack.pop()
-                        # 栈空 = 匹配到最外层闭合大括号，终止遍历
                         if not stack:
                             break
             return full_str
 
-        # 提取完整的JS对象字符串
         char_info_js_str = get_full_js_object(char_info_raw).strip()
+        char_info_js_str = re.sub(r'//.*?\n', '\n', char_info_js_str)
+        char_info_js_str = re.sub(r'/\*[\s\S]*?\*/', '', char_info_js_str)
+        char_info_js_str = re.sub(r'\s+', ' ', char_info_js_str)
+        char_info_js_str = remove_trailing_commas(char_info_js_str)
 
-        # 清理注释、尾逗号
-        char_info_js_str = re.sub(r'//.*?\n', '\n', char_info_js_str)  # 移除单行注释
-        char_info_js_str = re.sub(r'/\*[\s\S]*?\*/', '', char_info_js_str)  # 移除多行注释
-        char_info_js_str = re.sub(r'\s+', ' ', char_info_js_str)  # 合并多余空格
-        char_info_js_str = remove_trailing_commas(char_info_js_str)  # 移除尾逗号
+        # 解析JS对象并整合数据
+        char_info = parse_js_object(char_info_js_str)
+        if not char_info:
+            raise ValueError("解析出空的角色数据")
 
-        # 4. 解析JS对象
-        try:
-            char_info = parse_js_object(char_info_js_str)
-            if not char_info:
-                raise ValueError("解析出空的角色数据")
-            print("JS对象解析成功：")
-        except Exception as e:
-            print(f"解析失败：{str(e)}")
-            # 保存错误的JS字符串（用于调试）
-            safe_filename = sanitize_filename(characterName)
-            with open(f"{safe_filename}_error_js.txt", 'w', encoding='utf-8') as f:
-                f.write(char_info_js_str)
-            print(f"错误的JS字符串已保存：{safe_filename}_error_js.txt")
-            sys.exit(1)
+        # 合并class和branch
+        class_val = char_info.get('class', '') or ''
+        branch_val = char_info.get('branch', '') or ''
+        merged_class = f"{class_val} {branch_val}".strip() or None
 
-        # 5. 保存文件
+        # 构建最终返回数据
+        result = {
+            "name": char_info.get('name'),
+            "group": char_info.get('group'),
+            "class": merged_class,
+            "file_data": file_data,
+            "experience": experience,
+            "level_up": level_up,
+            "error": None
+        }
+
+        # 保存文件（可选，调试用）
         safe_filename = sanitize_filename(characterName)
-        html_path = Path(f"{safe_filename}.html")
-        json_path = Path(f"{safe_filename}.json")
-
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(response.text)
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(char_info, f, ensure_ascii=False, indent=4)
-
-        print(f"\n文件保存成功：")
-        print(f"HTML：{html_path.absolute()}")
-        print(f"JSON：{json_path.absolute()}")
+        with open(Path(f"{safe_filename}.json"), 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=4)
 
     except requests.RequestException as e:
-        print(f"网络错误：{str(e)}")
-        sys.exit(1)
+        result["error"] = f"网络错误：{str(e)}"
     except Exception as e:
-        print(f"未知错误：{str(e)}")
-        sys.exit(1)
+        result["error"] = f"未知错误：{str(e)}"
+    finally:
+        # 输出带标记的JSON（核心：仅这一行JSON输出）
+        print(f"###JSON_START###{json.dumps(result, ensure_ascii=False)}###JSON_END###")
+        sys.exit(0 if result["error"] is None else 1)
 
 if __name__ == '__main__':
     get_html()

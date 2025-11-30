@@ -8,7 +8,7 @@ import java.util.Optional;
 @Data
 public class CharacterInformation {
 //    name: str  # 干员名称
-//    profession: str  # 职业ke
+//    profession: str  # 职业
 //    camp: str  # 阵营
 //    archive: Optional[str]  # 档案文本
 //    error: Optional[str] = None  # 错误信息
@@ -16,6 +16,8 @@ public class CharacterInformation {
     private String name;
     private String profession;
     private String camp;
-    private String archive;
+    private String[] file_data;
+    private String experience;
+    private String level_up;
     private String error;
 }

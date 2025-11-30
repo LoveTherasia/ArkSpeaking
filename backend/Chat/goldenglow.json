@@ -1,0 +1,26 @@
+[
+    {
+        "sendId": "user",
+        "chatId": "goldenglow",
+        "content": "hello",
+        "sendTime": "2025-11-25 09:43:53"
+    },
+    {
+        "sendId": "goldenglow",
+        "chatId": "goldenglow",
+        "content": "这是AI的模拟回复",
+        "sendTime": "2025-11-25 09:43:54"
+    },
+    {
+        "sendId": "user",
+        "chatId": "goldenglow",
+        "content": "nihao",
+        "sendTime": "2025-11-26 11:41:35"
+    },
+    {
+        "sendId": "goldenglow",
+        "chatId": "goldenglow",
+        "content": "这是AI的模拟回复",
+        "sendTime": "2025-11-26 11:41:37"
+    }
+]
