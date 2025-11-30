@@ -25,6 +25,8 @@ const messageContainer = ref(null);//消息容器
 const userAvatar = "http://localhost:5173/src/assets/user.jpg";//角色头像
 
 const isLoading = ref(false);
+const rightLoading = ref(false); // 右侧角色信息加载状态
+const characterDetail = ref(null); // 新增：存储从后端获取的角色详细信息
 
 // 【调试用】手动切换加载状态（快速验证）
 const testLoading = () => {
@@ -69,7 +71,7 @@ const readChatMessage = async () => {
         console.log(backendMessages);
 
         messages.value = backendMessages.map(msg => ({
-            sender:msg.sendId === currentCharacter.value?.characterId ? 'user' : 'ai',
+            sender:msg.sendId === currentCharacter.value?.characterId ? 'ai' : 'user',
             content: msg.content,
         }))
 
@@ -81,19 +83,22 @@ const readChatMessage = async () => {
     }
 };
 
-//尝试调用后端爬取数据代码
+//从后端获取角色详细信息
 const fetchData = async () => {
-    console.log(currentCharacter.value?.name);
+    if(!currentCharacter.value) return;
+    console.log("获取角色信息：", currentCharacter.value?.name);
     try{
         const response = await axios.get("/chat/fetch",{
             params:{
                 characterName: currentCharacter.value?.name
             }
         });
-        console.log(response.data);
+        console.log("角色详细信息：", response.data);
+        characterDetail.value = response.data; // 存储角色详细信息
     } catch (error) {
-        console.error("信息读取失败！", error.response?.data?.msg || error.message);
-        alert("信息读取失败!");
+        console.error("角色详细信息读取失败！", error.response?.data?.msg || error.message);
+        alert("角色详细信息读取失败!");
+        characterDetail.value = null; // 失败时清空
     }
 };
 
@@ -107,19 +112,30 @@ watch(
     () => route.params.characterId,
     async (newCharacterId) => {
         if (!characterList.value.length) return;
+        
+        // 重置状态
+        rightLoading.value = true;
+        characterDetail.value = null; // 切换角色时清空详情
 
-        //查找新角色
-        const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
-        if(!newCharacter){
-            alert("不存在该角色" + newCharacterId);
-            router.push("/");
-            return;
+        try {
+            //查找新角色
+            const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
+            if(!newCharacter){
+                alert("不存在该角色" + newCharacterId);
+                router.push("/");
+                return;
+            }
+
+            currentCharacter.value = newCharacter;
+            await readChatMessage();
+            await fetchData(); // 获取角色详细信息
+            console.log("当前角色:", currentCharacter.value);
+        } catch (error) {
+            console.error("角色信息加载失败", error);
+        } finally {
+            // 无论成功失败都关闭加载动画
+            rightLoading.value = false;
         }
-
-        currentCharacter.value = newCharacter;
-        await readChatMessage();
-        await fetchData();
-        console.log("当前角色:", currentCharacter.value);
     },
     { immediate: true }
 );
@@ -202,7 +218,7 @@ const switchCharacter = (characterId) => {
 
 
 <template>
-    <div class="Chat-home">
+    <div class="chat-home">
         <!-- 角色聊天列表 -->
         <div class="left">
             <div class="character-card" v-for="character in characterList" :key="character.id" @click="switchCharacter(character.characterId)" :class="{ active: currentCharacter && currentCharacter.characterId === character.characterId }">
@@ -257,21 +273,69 @@ const switchCharacter = (characterId) => {
 
         <!-- 右侧角色设定展示区域 -->
         <div class="right">
-            <div class="character-information">
-                <div class="character-image">
-                     <img :src="currentCharacter?.avatar" alt="currentCharacter?.name " class="character-information-avatar">
+            <!-- 右侧加载动画 -->
+            <div class="right-loading-container" v-if="rightLoading">
+                <div class="right-loading-content">
+                    <Loading class="right-loading-icon" />
+                    <span class="right-loading-text">正在加载角色信息...</span>
                 </div>
+            </div>
+
+            <!-- 角色信息展示（结合后端返回的详细信息） -->
+            <div class="character-information" v-else-if="currentCharacter && characterDetail">
+                <!-- 角色基础信息（头像+名称） -->
+                <div class="character-info-header">
+                    <img :src="currentCharacter.avatar" alt="characterDetail.name" class="character-info-avatar">
+                    <h2 class="character-info-name">{{ characterDetail.name || currentCharacter.name }}</h2>
+                </div>
+
+                <!-- 角色核心信息 -->
+                <div class="character-info-body">
+                    <!-- 基础属性 -->
+                    <div class="info-group">
+                        <div class="info-item">
+                            <span class="info-label">角色ID：</span>
+                            <span class="info-value">{{ currentCharacter.characterId }}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">职业：</span>
+                            <span class="info-value">{{ characterDetail.profession || '暂无' }}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">阵营：</span>
+                            <span class="info-value">{{ characterDetail.camp || '暂无' }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 角色履历 -->
+                    <div class="info-group">
+                        <h3 class="group-title">角色履历</h3>
+                        <div class="info-item full-width">
+                            <span class="info-value">{{ characterDetail.experience || '暂无' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        
+            <!-- 无角色/无详情时的占位 -->
+            <div class="no-character" v-else>
+                <p>{{ currentCharacter ? '暂无角色详细信息' : '暂无选中的角色' }}</p>
             </div>
         </div>
     </div>
 </template>
 
 <style scoped>
-.Chat-home {
+.chat-home {
     background-color: #ffffff;
     width: 100vw;
     height: 100vh;
-    position: relative;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     overflow: hidden;
     display: flex;
     flex-direction: row;
@@ -279,7 +343,8 @@ const switchCharacter = (characterId) => {
 
 /* 左侧角色列表 */
 .left {
-    width: 10vw;
+    flex: 0 0 120px;
+    min-width: 120px;
     min-height: 100vh;
     background-color: #f5f7fa;
     padding: 16px 8px;
@@ -319,8 +384,8 @@ const switchCharacter = (characterId) => {
 .character-card > div {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    width: 20px;
+    align-items: center;
+    width: 100%;
     height: 100%;
     gap: 12px;
     cursor: pointer;
@@ -352,7 +417,9 @@ const switchCharacter = (characterId) => {
 }
 
 .main {
-    width: 70vw;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     min-height: 100vh;
     box-sizing: border-box;
     overflow-y: auto;
@@ -361,7 +428,6 @@ const switchCharacter = (characterId) => {
 .header {
     width: 100%;
     height: 60px;
-    border-bottom: 1px solid #e2e8f0;
     background-color: #f5f7fa;
     /* 设置边框 */
     border-bottom: 1px solid #908f8f6a;
@@ -377,11 +443,12 @@ const switchCharacter = (characterId) => {
 }
 
 .message-container {
-    height: calc(100vh - 200px);
+    flex: 1;
     overflow-y: auto;
     padding: 16px;
     box-sizing: border-box;
     background-color: #f5f7fa;
+    min-height: 0; /* 允许flex子元素缩小到内容高度以下 */
 }
 
 .input-area {
@@ -477,12 +544,48 @@ const switchCharacter = (characterId) => {
     min-width: 120px; /* 确保不会被压缩 */
 }
 
-/* Loading图标旋转动画 */
+/* 通用旋转动画类 */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 通用加载动画类 */
+.loading-spinner {
+    display: inline-block;
+    color: #4299e1;
+    animation: spin 1s linear infinite;
+}
+
+.loading-spinner.small {
+    width: 16px;
+    height: 16px;
+}
+
+.loading-spinner.medium {
+    width: 24px;
+    height: 24px;
+}
+
+.loading-spinner.large {
+    width: 32px;
+    height: 32px;
+}
+
+.loading-spinner.slow {
+    animation-duration: 2s;
+}
+
+.loading-spinner.fast {
+    animation-duration: 0.8s;
+}
+
+/* 兼容现有代码的loading-icon样式 */
 .loading-icon {
     width: 18px;
     height: 18px;
     color: #4299e1;
-    animation: rotate 1.5s linear infinite; /* 旋转动画 */
+    animation: rotate 1.5s linear infinite; /* 保持向后兼容 */
 }
 
 /* 加载文字 */
@@ -492,10 +595,78 @@ const switchCharacter = (characterId) => {
     line-height: 1;
 }
 
-/* 旋转动画关键帧 */
+/* 保持向后兼容的旋转动画 */
 @keyframes rotate {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+
+/* 响应式设计支持 */
+@media (max-width: 1200px) {
+    /* 中等屏幕：适当调整右侧面板宽度 */
+    .right {
+        flex: 0 0 280px;
+        min-width: 280px;
+    }
+}
+
+@media (max-width: 992px) {
+    /* 小屏幕：隐藏右侧面板 */
+    .right {
+        display: none;
+    }
+    
+    /* 增加主内容区域占比 */
+    .left {
+        flex: 0 0 100px;
+        min-width: 100px;
+    }
+}
+
+@media (max-width: 768px) {
+    /* 平板设备：调整布局为垂直堆叠 */
+    .chat-home {
+        flex-direction: column;
+    }
+    
+    .left {
+        flex: 0 0 auto;
+        min-width: auto;
+        height: auto;
+        min-height: auto;
+        max-height: 120px;
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+    
+    .character-card {
+        min-width: 80px;
+        width: 80px;
+    }
+}
+
+@media (max-width: 576px) {
+    /* 移动设备：进一步简化布局 */
+    .left {
+        padding: 12px 4px;
+        gap: 8px;
+    }
+    
+    .character-card {
+        min-width: 70px;
+        width: 70px;
+        height: 90px;
+    }
+    
+    .message-content {
+        max-width: 85% !important;
+    }
+    
+    .input-area {
+        height: 120px;
+        padding: 10px 12px;
+    }
 }
 
 /* 禁用状态的输入框样式 */
@@ -505,30 +676,182 @@ const switchCharacter = (characterId) => {
     color: #9ca3af;
 }
 
-/* 角色信息卡片 */
-
+/* 右侧区域样式 */
 .right {
-    width: 20vw;
+    flex: 0 0 320px;
+    min-width: 320px;
     min-height: 100vh;
-    background-color: #ededed;
-    padding: 0;
+    background-color: #f8f9fa;
+    padding: 20px;
     box-sizing: border-box;
     box-shadow: -2px 0 10px rgba(0, 0, 0, 0.05);
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
 }
 
-.character-information{
+/* 右侧加载动画样式 */
+.right-loading-container {
     width: 100%;
     height: 100%;
-    background-color: #92fbd125;
-    border-left: 1px solid #908f8f6a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.character-image{
-    width: 80%;
+.right-loading-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background-color: #e8f4f8;
+    padding: 16px 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.character-information-avatar{
+.right-loading-icon {
+    width: 24px;
+    height: 24px;
+    color: #4299e1;
+    animation: rotate 1.5s linear infinite;
+}
+
+.right-loading-text {
+    font-size: 16px;
+    color: #4a5568;
+    font-weight: 500;
+}
+
+/* 角色信息展示样式 */
+.character-information {
     width: 100%;
+    height: 100%;
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    padding: 24px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.character-info-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 20px;
+}
+
+.character-info-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 4px solid #e8f4f8;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.character-info-name {
+    font-size: 24px;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0;
+}
+
+/* 信息分组样式 */
+.character-info-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.info-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.group-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #e8f4f8;
+}
+
+.info-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.info-item.full-width {
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-label {
+    font-size: 14px;
+    color: #718096;
+    font-weight: 500;
+    flex-shrink: 0;
+    min-width: 60px;
+}
+
+.info-value {
+    font-size: 16px;
+    color: #2d3748;
+    line-height: 1.5;
+    word-break: break-all;
+    flex: 1;
+}
+
+/* 档案项样式 */
+.file-item {
+    display: flex;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f2f5;
+}
+
+.file-label {
+    font-size: 14px;
+    color: #718096;
+    font-weight: 500;
+    flex-shrink: 0;
+    min-width: 60px;
+}
+
+.file-content {
+    font-size: 16px;
+    color: #2d3748;
+    line-height: 1.5;
+    word-break: break-all;
+    flex: 1;
+}
+
+/* 空提示样式 */
+.empty-tip {
+    font-size: 14px;
+    color: #9ca3af;
+    text-align: center;
+    padding: 8px 0;
+}
+
+/* 无角色占位样式 */
+.no-character {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #718096;
+    font-size: 18px;
 }
 </style>
