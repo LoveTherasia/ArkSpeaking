@@ -24,11 +24,12 @@ const inputMessage = ref("");//输入消息
 const messageContainer = ref(null);//消息容器
 const userAvatar = "http://localhost:5173/src/assets/user.jpg";//角色头像
 
+
 const isLoading = ref(false);
 const rightLoading = ref(false); // 右侧角色信息加载状态
 const characterDetail = ref(null); // 新增：存储从后端获取的角色详细信息
 
-// 【调试用】手动切换加载状态（快速验证）
+// 手动切换加载状态调试
 const testLoading = () => {
   isLoading.value = !isLoading.value;
 };
@@ -104,14 +105,45 @@ const fetchData = async () => {
 
 //加载角色数据
 onMounted(async () => {
-    characterList.value = await loadCharacter();
+    try{
+        characterList.value = await loadCharacter();
+        await initCurrentCharacter();
+    } catch (error) {
+        console.error("角色初始化失败：", error);
+    }
 }); 
+
+// 初始化当前角色（抽离逻辑，解决时序问题）
+const initCurrentCharacter = async () => {
+    const characterId = route.params.characterId;
+    if (!characterId || !characterList.value.length) return;
+
+    rightLoading.value = true;
+    try {
+        const newCharacter = characterList.value.find(c => c.characterId === characterId) || null;
+        if(!newCharacter){
+            console.warn("不存在该角色：", characterId);
+            router.push("/");
+            return;
+        }
+
+        currentCharacter.value = newCharacter;
+        await readChatMessage(); // 加载聊天记录
+        await fetchData(); // 加载角色详情
+        console.log("当前角色初始化完成：", currentCharacter.value);
+    } catch (error) {
+        console.error("角色初始化失败：", error);
+    } finally {
+        rightLoading.value = false;
+    }
+};
 
 //监听角色端口变化(用户切换对话角色)
 watch(
     () => route.params.characterId,
     async (newCharacterId) => {
         if (!characterList.value.length) return;
+        alert("切换角色");
         
         // 重置状态
         rightLoading.value = true;
@@ -214,11 +246,33 @@ const switchCharacter = (characterId) => {
         params: { characterId },
     });
 }
-</script>
 
+//角色信息弹窗控制
+const dialogVisible = ref(false);
+
+const openDialog = () => {
+    console.log("打开弹窗");
+    dialogVisible.value = true;
+};
+
+const closeDialog = () => {
+    dialogVisible.value = false;
+};
+</script>
 
 <template>
     <div class="chat-home">
+    <!-- 角色详细信息弹窗 -->
+    <el-dialog title="角色详细信息" :model-value="dialogVisible" @update:model-value="dialogVisible = $event" width="400px" height="400px" @close="closeDialog" z-index="1000">
+        <div v-if="characterDetail">
+            <img :src="currentCharacter.avatar" alt="">
+            <p><strong>姓名:</strong> {{ characterDetail.name }}</p>
+        </div>
+        <div v-else>
+            <p>暂无角色详细信息</p>
+        </div>
+    </el-dialog>
+
         <!-- 角色聊天列表 -->
         <div class="left">
             <div class="character-card" v-for="character in characterList" :key="character.id" @click="switchCharacter(character.characterId)" :class="{ active: currentCharacter && currentCharacter.characterId === character.characterId }">
@@ -231,13 +285,17 @@ const switchCharacter = (characterId) => {
             <button @click="testLoading" style="margin-top:20px;padding:8px 16px;cursor:pointer;">
                     测试加载状态
             </button>
+
+            <button @click="openDialog">角色详细信息</button>
         </div>
 
         <!-- 中间聊天部分 -->
         <div class="main">
             <!-- 头部显示区域 -->
             <div class="header">
+                <div>
                 <p>{{ currentCharacter ? currentCharacter.name : '' }}</p>
+                </div>
             </div>
 
             <!-- 信息显示区域 -->
@@ -327,6 +385,7 @@ const switchCharacter = (characterId) => {
 </template>
 
 <style scoped>
+
 .chat-home {
     background-color: #ffffff;
     width: 100vw;
@@ -853,5 +912,114 @@ const switchCharacter = (characterId) => {
     justify-content: center;
     color: #718096;
     font-size: 18px;
+}
+
+/* 角色信息弹窗样式 */
+.el-dialog__header {
+    background-color: #f5f7fa;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.el-dialog__title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.el-dialog__body {
+    padding: 24px;
+    max-height: 500px;
+    overflow-y: auto;
+    background-color: #ffffff;
+}
+
+.el-dialog__body img {
+    display: block;
+    width: 180px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin: 0 auto 20px;
+    border: 3px solid #e8f4f8;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.el-dialog__body p {
+    margin-bottom: 12px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: #2d3748;
+}
+
+.el-dialog__body strong {
+    color: #4a5568;
+    font-weight: 600;
+    min-width: 80px;
+    display: inline-block;
+}
+
+.el-dialog__footer {
+    padding: 16px 24px;
+    background-color: #f5f7fa;
+    border-top: 1px solid #e2e8f0;
+    text-align: right;
+}
+
+/* 弹窗按钮样式 */
+.el-button--primary {
+    background-color: #4299e1;
+    border-color: #4299e1;
+}
+
+.el-button--primary:hover {
+    background-color: #3182ce;
+    border-color: #3182ce;
+}
+
+/* 弹窗遮罩层 */
+.el-dialog__wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 弹窗动画 */
+.el-dialog__wrapper .el-dialog {
+    animation: dialogFadeIn 0.3s ease;
+}
+
+@keyframes dialogFadeIn {
+    from {
+        opacity: 0;
+        transform: translate3d(0, -20px, 0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+/* 角色详细信息按钮样式 */
+.left button:nth-of-type(2) {
+    margin-top: 16px;
+    padding: 10px 16px;
+    background-color: #4299e1;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.left button:nth-of-type(2):hover {
+    background-color: #3182ce;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+}
+
+.left button:nth-of-type(2):active {
+    transform: translateY(0);
 }
 </style>
