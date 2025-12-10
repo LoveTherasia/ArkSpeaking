@@ -24,10 +24,14 @@ const inputMessage = ref("");//输入消息
 const messageContainer = ref(null);//消息容器
 const userAvatar = "http://localhost:5173/src/assets/user.jpg";//角色头像
 
-
 const isLoading = ref(false);
 const rightLoading = ref(false); // 右侧角色信息加载状态
-const characterDetail = ref(null); // 新增：存储从后端获取的角色详细信息
+const characterDetail = ref(null); // 存储从后端获取的角色详细信息
+
+// 用于取消异步请求的控制器
+let abortController = null;
+// 当前正在加载的角色ID
+let currentLoadingCharacterId = null;
 
 // 手动切换加载状态调试
 const testLoading = () => {
@@ -48,58 +52,89 @@ const saveChatMessage = async (message) => {
     try {
         await axios.post('/chat/save', {
             sendId: message.senderId,
-            receiveId: message.receiverId,
+            receiveId: message.receiveId,
             content: message.content
         });
         console.log("信息发送成功");
     } catch (error) {
-        console.error("信息存储失败", error);
-        alert("信息存储失败!");
+        // 忽略取消请求的错误
+        if (error.name !== 'AbortError') {
+            console.error("信息存储失败", error);
+            alert("信息存储失败!");
+        }
     }
 }
 
-//从后端加载本地的存储的聊天信息
-const readChatMessage = async () => {
-    if(!currentCharacter.value) return;
+//从后端读取聊天记录
+const readChatMessage = async (targetCharacterId) => {
+    if(!targetCharacterId) return;
+    // 取消之前未完成的请求
+    if (abortController) {
+        abortController.abort();
+    }
+    // 创建新的控制器
+    abortController = new AbortController();
+    
     try {
         const response = await axios.get("/chat/read", {
             params: {
-                characterId: currentCharacter.value?.characterId
-            }
+                characterId: targetCharacterId
+            },
+            signal: abortController.signal // 绑定取消信号
         });
+
+        if (targetCharacterId !== currentLoadingCharacterId) return;
 
         const backendMessages = Array.isArray(response.data) ? response.data : [];
         console.log(backendMessages);
 
         messages.value = backendMessages.map(msg => ({
-            sender:msg.sendId === currentCharacter.value?.characterId ? 'ai' : 'user',
+            sender:msg.sendId === targetCharacterId ? 'ai' : 'user',
             content: msg.content,
         }))
 
         console.log("聊天记录加载成功", messages.value);
         scrollToBottom();
     } catch (error) {
-        console.error("信息读取失败！", error.response?.data?.msg || error.message);
-        alert("信息读取失败!");
+        // 忽略取消请求的错误
+        if (error.name !== 'AbortError') {
+            console.error("信息读取失败！", error.response?.data?.msg || error.message);
+            alert("信息读取失败!");
+        }
     }
 };
 
 //从后端获取角色详细信息
-const fetchData = async () => {
-    if(!currentCharacter.value) return;
-    console.log("获取角色信息：", currentCharacter.value?.name);
+const fetchData = async (targetCharacterId, characterName) => {
+    if(!targetCharacterId || !characterName) return;
+    // 取消之前未完成的请求
+    if (abortController) {
+        abortController.abort();
+    }
+    // 创建新的控制器
+    abortController = new AbortController();
+    
     try{
         const response = await axios.get("/chat/fetch",{
             params:{
-                characterName: currentCharacter.value?.name
-            }
+                characterName: characterName
+            },
+            signal: abortController.signal // 绑定取消信号
         });
+
+        if (targetCharacterId !== currentLoadingCharacterId) return;
+
         console.log("角色详细信息：", response.data);
         characterDetail.value = response.data; // 存储角色详细信息
     } catch (error) {
-        console.error("角色详细信息读取失败！", error.response?.data?.msg || error.message);
-        alert("角色详细信息读取失败!");
-        characterDetail.value = null; // 失败时清空
+        // 忽略取消请求的错误
+        if (error.name !== 'AbortError') {
+            console.error("角色详细信息读取失败！", error.response?.data?.msg || error.message);
+            // 仅当请求未被取消且是当前角色时，才清空详情
+            if (targetCharacterId === currentLoadingCharacterId) {
+                characterDetail.value = null;
+            }
+        }
     }
 };
 
@@ -119,6 +154,9 @@ const initCurrentCharacter = async () => {
     if (!characterId || !characterList.value.length) return;
 
     rightLoading.value = true;
+
+    currentLoadingCharacterId = characterId;
+    
     try {
         const newCharacter = characterList.value.find(c => c.characterId === characterId) || null;
         if(!newCharacter){
@@ -128,13 +166,16 @@ const initCurrentCharacter = async () => {
         }
 
         currentCharacter.value = newCharacter;
-        await readChatMessage(); // 加载聊天记录
-        await fetchData(); // 加载角色详情
+        await readChatMessage(characterId); // 传入目标角色ID
+        await fetchData(characterId, newCharacter.name); // 传入目标角色ID和名称
         console.log("当前角色初始化完成：", currentCharacter.value);
     } catch (error) {
         console.error("角色初始化失败：", error);
     } finally {
-        rightLoading.value = false;
+        // 仅当当前加载的角色ID和初始化的ID一致时，才关闭加载
+        if (currentLoadingCharacterId === characterId) {
+            rightLoading.value = false;
+        }
     }
 };
 
@@ -142,12 +183,12 @@ const initCurrentCharacter = async () => {
 watch(
     () => route.params.characterId,
     async (newCharacterId) => {
-        if (!characterList.value.length) return;
-        alert("切换角色");
+        if (!characterList.value.length || !newCharacterId) return;
         
         // 重置状态
         rightLoading.value = true;
         characterDetail.value = null; // 切换角色时清空详情
+        currentLoadingCharacterId = newCharacterId;
 
         try {
             //查找新角色
@@ -159,14 +200,19 @@ watch(
             }
 
             currentCharacter.value = newCharacter;
-            await readChatMessage();
-            await fetchData(); // 获取角色详细信息
+            await readChatMessage(newCharacterId); // 传入目标角色ID
+            await fetchData(newCharacterId, newCharacter.name); // 传入目标角色ID和名称
             console.log("当前角色:", currentCharacter.value);
         } catch (error) {
-            console.error("角色信息加载失败", error);
+            // 忽略取消请求的错误
+            if (error.name !== 'AbortError') {
+                console.error("角色信息加载失败", error);
+            }
         } finally {
-            // 无论成功失败都关闭加载动画
-            rightLoading.value = false;
+            // 仅当当前加载的角色ID和新角色ID一致时，才关闭加载
+            if (currentLoadingCharacterId === newCharacterId) {
+                rightLoading.value = false;
+            }
         }
     },
     { immediate: true }
@@ -187,7 +233,7 @@ const sendMessage = () => {
 
     saveChatMessage({
         sendId: 'user',
-        chatId: currentCharacter.value.characterId,
+        receiveId: currentCharacter.value.characterId, // 修正字段名：chatId -> receiveId（和createChatMessage对齐）
         content: inputMessage.value.trim(),
     });
 
@@ -199,9 +245,21 @@ const sendMessage = () => {
 
 //模拟AI回复
 const simulateAIResponse = () => {
+    if (!currentCharacter.value) return;
+    
     isLoading.value = true;
     console.log("加载中...", isLoading.value);
+    
+    // 【关键】记录当前回复的角色ID，防止切换角色后旧回复生效
+    const currentReplyCharacterId = currentCharacter.value.characterId;
+    
     setTimeout(() => {
+        // 校验：如果当前角色已切换，不再处理旧回复
+        if (currentCharacter.value?.characterId !== currentReplyCharacterId) {
+            isLoading.value = false;
+            return;
+        }
+
         const reply = "这是AI的模拟回复";
 
         messages.value.push({
@@ -213,7 +271,7 @@ const simulateAIResponse = () => {
 
         saveChatMessage({
             sendId: currentCharacter.value.characterId,
-            chatId: currentCharacter.value.characterId,
+            receiveId: currentCharacter.value.characterId,
             content: reply,
         });
 
@@ -385,7 +443,7 @@ const closeDialog = () => {
 </template>
 
 <style scoped>
-
+/* 样式部分无修改，保持原有样式 */
 .chat-home {
     background-color: #ffffff;
     width: 100vw;
