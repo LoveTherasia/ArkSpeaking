@@ -51,8 +51,8 @@ const createChatMessage = (senderId, receiverId, content) => {
 const saveChatMessage = async (message) => {
     try {
         await axios.post('/chat/save', {
-            sendId: message.senderId,
-            receiveId: message.receiveId,
+            sendId: message.sendId,
+            chatId: message.chatId,
             content: message.content
         });
         console.log("信息发送成功");
@@ -233,7 +233,7 @@ const sendMessage = () => {
 
     saveChatMessage({
         sendId: 'user',
-        receiveId: currentCharacter.value.characterId, // 修正字段名：chatId -> receiveId（和createChatMessage对齐）
+        chatId: currentCharacter.value.characterId,
         content: inputMessage.value.trim(),
     });
 
@@ -250,29 +250,33 @@ const simulateAIResponse = () => {
     isLoading.value = true;
     console.log("加载中...", isLoading.value);
     
-    // 【关键】记录当前回复的角色ID，防止切换角色后旧回复生效
     const currentReplyCharacterId = currentCharacter.value.characterId;
     
-    setTimeout(() => {
+    setTimeout(async () => {
         // 校验：如果当前角色已切换，不再处理旧回复
         if (currentCharacter.value?.characterId !== currentReplyCharacterId) {
             isLoading.value = false;
             return;
         }
 
-        const reply = "这是AI的模拟回复";
+        const reply = await axios.post('/chat/ai',{
+            chatId: currentCharacter.value.characterId,
+            content:messages.value.filter(msg => msg.sender === 'user').slice(-1)[0].content
+        })
+
+        console.log("AI回复：", reply.data.reply);
 
         messages.value.push({
             sender: 'ai',
-            content: reply,
+            content: reply.data,
             time: new Date().toLocaleTimeString(),
         });
         scrollToBottom();//滚动到底部
 
         saveChatMessage({
             sendId: currentCharacter.value.characterId,
-            receiveId: currentCharacter.value.characterId,
-            content: reply,
+            chatId: currentCharacter.value.characterId,
+            content: reply.data,
         });
 
         isLoading.value = false;
