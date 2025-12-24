@@ -27,6 +27,7 @@ const userAvatar = "http://localhost:5173/src/assets/user.jpg";//角色头像
 const isLoading = ref(false);
 const rightLoading = ref(false); // 右侧角色信息加载状态
 const characterDetail = ref(null); // 存储从后端获取的角色详细信息
+const favor = ref(null);//角色好感度值
 
 // 用于取消异步请求的控制器
 let abortController = null;
@@ -123,7 +124,7 @@ const fetchData = async (targetCharacterId, characterName) => {
         });
 
         if (targetCharacterId !== currentLoadingCharacterId) return;
-
+            
         console.log("角色详细信息：", response.data);
         characterDetail.value = response.data; // 存储角色详细信息
     } catch (error) {

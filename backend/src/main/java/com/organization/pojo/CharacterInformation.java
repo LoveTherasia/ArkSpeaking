@@ -11,6 +11,7 @@ public class CharacterInformation {
 //    profession: str  # 职业
 //    camp: str  # 阵营
 //    archive: Optional[str]  # 档案文本
+//    favor: int # 好感度
 //    error: Optional[str] = None  # 错误信息
 
     private String name;
@@ -19,5 +20,6 @@ public class CharacterInformation {
     private String[] file_data;
     private String experience;
     private String level_up;
+    private int favor;
     private String error;
 }

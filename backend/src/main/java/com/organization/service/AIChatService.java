@@ -7,5 +7,5 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.io.IOException;
 
 public interface AIChatService {
-    public String generateReply(ChatMessage userMessage) throws IOException, InterruptedException;
+    public ChatMessage generateReply(ChatMessage userMessage) throws IOException, InterruptedException;
 }

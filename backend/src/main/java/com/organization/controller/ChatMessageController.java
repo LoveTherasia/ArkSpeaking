@@ -29,7 +29,7 @@ public class ChatMessageController {
     private AIChatService aiChatService;
 
     @PostMapping("/ai")
-    public String generateAiReply(@RequestBody ChatMessage chatMessage) throws IOException,InterruptedException{
+    public ChatMessage generateAiReply(@RequestBody ChatMessage chatMessage) throws IOException,InterruptedException{
         System.out.println("尝试用AI回复");
         System.out.println(chatMessage);
         return aiChatService.generateReply(chatMessage);

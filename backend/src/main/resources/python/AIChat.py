@@ -19,16 +19,18 @@ except ImportError:
         import zhipuai
         from zhipuai import ZhipuAI
     except ImportError:
-        print("❌ 未检测到任何AI客户端模块（zai/zhipuai）")
-        sys.stdout.flush()
+        # 修改：错误信息输出到stderr
+        print("❌ 未检测到任何AI客户端模块（zai/zhipuai）", file=sys.stderr)
+        sys.stderr.flush()
         sys.exit(1)
 
 # 初始化客户端（替换为你的有效API密钥）
 try:
     client = ZhipuAiClient(api_key="3d10ac1e3ed14e5dbc95d2f090195ace.kEldLSGThCEtncUF")
 except Exception as e:
-    print(f"❌ 初始化AI客户端失败：{str(e)}")
-    sys.stdout.flush()
+    # 修改：错误信息输出到stderr
+    print(f"❌ 初始化AI客户端失败：{str(e)}", file=sys.stderr)
+    sys.stderr.flush()
     sys.exit(1)
 
 # ========== 业务核心函数 ==========
@@ -37,20 +39,20 @@ def get_character_prompt(character_id):
     character_dir = os.path.join(project_root, "CharacterSet")
     character_file_path = os.path.join(character_dir, f"{character_id}.txt")
     if not os.path.exists(character_dir):
-        print(f"❌ 角色配置文件夹不存在：{character_dir}")
-        sys.stdout.flush()
+        print(f"❌ 角色配置文件夹不存在：{character_dir}", file=sys.stderr)
+        sys.stderr.flush()
         sys.exit(1)
     if not os.path.exists(character_file_path):
-        print(f"❌ 未找到角色[{character_id}]的人设文件：{character_file_path}")
-        sys.stdout.flush()
+        print(f"❌ 未找到角色[{character_id}]的人设文件：{character_file_path}", file=sys.stderr)
+        sys.stderr.flush()
         sys.exit(1)
     try:
         with open(character_file_path, "r", encoding="utf-8") as f:
             prompt_content = f.read().strip()
         return prompt_content
     except Exception as e:
-        print(f"❌ 读取角色[{character_id}]人设失败：{str(e)}")
-        sys.stdout.flush()
+        print(f"❌ 读取角色[{character_id}]人设失败：{str(e)}", file=sys.stderr)
+        sys.stderr.flush()
         sys.exit(1)
 
 def get_chat_history(character_id, max_num=10):
@@ -66,7 +68,7 @@ def get_chat_history(character_id, max_num=10):
             history_content = json.load(f)
         chat_history = history_content.get("history", [])
         if not isinstance(chat_history, list):
-            print("找不到文件" + history_file_path)
+            print("找不到文件" + history_file_path, file=sys.stderr)
             return []
         valid_history = []
         for msg in chat_history[-max_num:]:
@@ -87,19 +89,19 @@ def load_prompt_template(file_path, required_placeholders):
         missing_required = required_placeholders - all_placeholders
 
         if invalid_placeholders:
-            print(f"❌ 模板存在无效占位符：{invalid_placeholders}")
-            sys.stdout.flush()
+            print(f"❌ 模板存在无效占位符：{invalid_placeholders}", file=sys.stderr)
+            sys.stderr.flush()
             sys.exit(1)
 
         if missing_required:
-            print(f"❌ 模板缺失必填占位符：{missing_required}")
-            sys.stdout.flush()
+            print(f"❌ 模板缺失必填占位符：{missing_required}", file=sys.stderr)
+            sys.stderr.flush()
             sys.exit(1)
 
         return content
     except Exception as e:
-        print(f"❌ 读取提示词模板失败：{str(e)}")
-        sys.stdout.flush()
+        print(f"❌ 读取提示词模板失败：{str(e)}", file=sys.stderr)
+        sys.stderr.flush()
         sys.exit(1)
 
 def get_favor(character_id):
@@ -157,7 +159,7 @@ def parse_favor_change(character_id, user_input, ai_response):
 def save_favor(character_id, user_input, favor_change, change_reason, ai_response):
     project_root = os.path.dirname(os.path.abspath(__file__))
     favor_dir = os.path.join(project_root, "favor")
-    favor_file = os.path.join(favor_dir, f"{character_id}.txt")
+    favor_file = os.path.join(favor_dir, f"{character_id}.json")
     os.makedirs(favor_dir, exist_ok=True)
 
     try:
@@ -184,8 +186,10 @@ def save_favor(character_id, user_input, favor_change, change_reason, ai_respons
         with open(favor_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"❌ 保存好感度失败：{str(e)}")
-        sys.stdout.flush()
+        print(f"❌ 保存好感度失败：{str(e)}", file=sys.stderr)
+        sys.stderr.flush()
+    # 修改：返回更新后的好感度
+    return new_favor
 
 # ========== 核心流程 ==========
 def process_chat():
@@ -200,8 +204,8 @@ def process_chat():
 
     try:
         if len(sys.argv) < 3:
-            print("❌ 参数错误！使用格式：python 脚本名.py <角色ID> <聊天内容>")
-            sys.stdout.flush()
+            print("❌ 参数错误！使用格式：python 脚本名.py <角色ID> <聊天内容>", file=sys.stderr)
+            sys.stderr.flush()
             sys.exit(1)
 
         character_id = sys.argv[1]
@@ -234,12 +238,12 @@ def process_chat():
             }
             system_prompt = system_prompt_template.format(**template_params)
         except KeyError as e:
-            print(f"❌ 提示词模板填充失败：缺失占位符「{e.args[0]}」")
-            sys.stdout.flush()
+            print(f"❌ 提示词模板填充失败：缺失占位符「{e.args[0]}」", file=sys.stderr)
+            sys.stderr.flush()
             sys.exit(1)
         except Exception as e:
-            print(f"❌ 提示词模板填充失败：{str(e)}")
-            sys.stdout.flush()
+            print(f"❌ 提示词模板填充失败：{str(e)}", file=sys.stderr)
+            sys.stderr.flush()
             sys.exit(1)
 
         # 6. 构建AI对话消息
@@ -272,13 +276,13 @@ def process_chat():
                     messages.append({"role": "user", "content": f"你的回复缺少强制格式要求的{FAVOR_MARKER_START}和{FAVOR_MARKER_END}分隔符及JSON结构化信息，请严格按照要求重新生成完整回复（包含角色对话+结构化信息）"})
 
             except Exception as e:
-                print(f"❌ AI接口调用失败：{str(e)}")
-                sys.stdout.flush()
+                print(f"❌ AI接口调用失败：{str(e)}", file=sys.stderr)
+                sys.stderr.flush()
                 sys.exit(1)
 
         if not valid_response:
-            print(f"❌ AI连续{max_retry}次返回不符合格式的回复，终止流程")
-            sys.stdout.flush()
+            print(f"❌ AI连续{max_retry}次返回不符合格式的回复，终止流程", file=sys.stderr)
+            sys.stderr.flush()
             sys.exit(1)
 
         # 8. 解析好感度变化
@@ -286,27 +290,35 @@ def process_chat():
             character_id, user_content, ai_raw_response
         )
 
-        # 9. 保存好感度
-        save_favor(character_id, user_content, favor_change, change_reason, ai_raw_response)
+        # 9. 保存好感度并获取更新后的好感度
+        new_favor = save_favor(character_id, user_content, favor_change, change_reason, ai_raw_response)
 
-        return clean_response
+        # 修改：返回AI回复 + 更新后的好感度
+        return clean_response, new_favor
 
     except Exception as e:
-        print(f"❌ 程序执行失败：{str(e)}")
-        sys.stdout.flush()
+        print(f"❌ 程序执行失败：{str(e)}", file=sys.stderr)
+        sys.stderr.flush()
         import traceback
-        traceback.print_exc()
+        traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 
 # ========== 程序入口 ==========
 if __name__ == "__main__":
     try:
-        final_response = process_chat()
-        print(final_response)
+        # 修改：接收AI回复和好感度两个返回值
+        ai_response, current_favor = process_chat()
+        # 修改：组装JSON格式输出（确保无乱码）
+        output = {
+            "current_favor": current_favor,  # 更新后的好感度
+            "ai_response": ai_response       # AI的干净回复
+        }
+        # 输出JSON字符串（stdout）
+        print(json.dumps(output, ensure_ascii=False))
         sys.stdout.flush()
     except Exception as e:
-        print(f"❌ 程序执行失败：{str(e)}")
-        sys.stdout.flush()
+        print(f"❌ 程序执行失败：{str(e)}", file=sys.stderr)
+        sys.stderr.flush()
         import traceback
-        traceback.print_exc()
+        traceback.print_exc(file=sys.stderr)
         sys.exit(1)

@@ -14,6 +14,8 @@ public class ChatMessage {
     private String chatId;
     //聊天内容
     private String content;
+    //当前好感
+    private int favor;
     //聊天时间
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss",timezone = "GMT+8")
     private LocalDateTime sendTime;
