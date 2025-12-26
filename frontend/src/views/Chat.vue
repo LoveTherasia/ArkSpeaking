@@ -244,7 +244,7 @@ const sendMessage = () => {
     simulateAIResponse();//模拟AI回复
 }
 
-//模拟AI回复
+//AI回复
 const simulateAIResponse = () => {
     if (!currentCharacter.value) return;
     
@@ -265,11 +265,11 @@ const simulateAIResponse = () => {
             content:messages.value.filter(msg => msg.sender === 'user').slice(-1)[0].content
         })
 
-        console.log("AI回复：", reply.data.reply);
+        console.log("AI回复：", reply.data);
 
         messages.value.push({
             sender: 'ai',
-            content: reply.data,
+            content: reply.data.content,
             time: new Date().toLocaleTimeString(),
         });
         scrollToBottom();//滚动到底部
@@ -277,7 +277,7 @@ const simulateAIResponse = () => {
         saveChatMessage({
             sendId: currentCharacter.value.characterId,
             chatId: currentCharacter.value.characterId,
-            content: reply.data,
+            content: reply.data.content,
         });
 
         isLoading.value = false;
