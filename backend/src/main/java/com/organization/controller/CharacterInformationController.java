@@ -13,7 +13,7 @@ public class CharacterInformationController {
     private LoadCharacterInformationService loadCharacterInformationService;
 
     @GetMapping("/chat/fetch")
-    public CharacterInformation fetchCharacterInformation(@RequestParam(name="characterName")String characterName) {
-        return loadCharacterInformationService.loadCharacterInformation(characterName);
+    public CharacterInformation fetchCharacterInformation(@RequestParam(name="characterId")String characterId,@RequestParam(name="characterName")String characterName) {
+        return loadCharacterInformationService.loadCharacterInformation(characterId,characterName);
     }
 }

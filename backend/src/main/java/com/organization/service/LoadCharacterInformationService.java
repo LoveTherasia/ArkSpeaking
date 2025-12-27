@@ -5,5 +5,5 @@ import com.organization.pojo.CharacterInformation;
 import java.io.IOException;
 
 public interface LoadCharacterInformationService {
-    CharacterInformation loadCharacterInformation(String characterName) ;
+    CharacterInformation loadCharacterInformation(String characterId,String  characterName) ;
 }

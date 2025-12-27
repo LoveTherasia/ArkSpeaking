@@ -5,17 +5,14 @@ import com.alibaba.fastjson.JSONObject;
 import com.organization.pojo.CharacterInformation;
 import com.organization.service.LoadCharacterInformationService;
 import org.springframework.stereotype.Service;
-import org.springframework.util.ResourceUtils;
 
 import java.io.*;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @Service
 public class LoadCharacterInformationServiceImpl implements LoadCharacterInformationService {
@@ -28,11 +25,12 @@ public class LoadCharacterInformationServiceImpl implements LoadCharacterInforma
     private static final String PYTHON_INTERPRETER_PATH = ".venv" + File.separator + "Scripts" + File.separator + "python.exe";
     //角色数据路径
     private static final String CHARACTER_DATA_PATH = "information";
+    //角色好感度路径
+    private static final String FAVOR_PATH = "src" + File.separator + "main" + File.separator + "resources" + File.separator + "python" + File.separator + "favor";
 
     //AI回复分隔符
     private static final String JSON_START = "###JSON_START###";
     private static final String JSON_END = "###JSON_END###";
-
 
     private CharacterInformation characterInformation;
 
@@ -46,9 +44,60 @@ public class LoadCharacterInformationServiceImpl implements LoadCharacterInforma
         return getProjectRootPath()+ File.separator + relativePath;
     }
 
+    // 从指定文件读取指定键名的信息
+    private String getCharacterInfoFromFile(String filePath, String key) {
+        // 空值校验
+        if (filePath == null || filePath.isEmpty() || key == null || key.isEmpty()) {
+            System.err.println("文件路径或键名不能为空");
+            return null;
+        }
+
+        File file = new File(filePath);
+        if (!file.exists() || !file.isFile()) {
+            System.err.println("文件不存在或不是有效文件：" + filePath);
+            return null;
+        }
+
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(Files.newInputStream(file.toPath()), StandardCharsets.UTF_8))) {
+
+            // 读取文件内容
+            StringBuilder stringBuilder = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                stringBuilder.append(line);
+            }
+
+            // 解析JSON并获取指定键的值
+            JSONObject jsonObject = JSON.parseObject(stringBuilder.toString());
+            return jsonObject.getString(key);
+
+        } catch (Exception e) {
+            System.err.println("读取文件[" + filePath + "]的[" + key + "]键失败：" + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    // 读取嵌套JSON对象的指定键（适配file_data）
+    private String getNestedCharacterInfoFromFile(String filePath, String parentKey, String childKey) {
+        String parentJsonStr = getCharacterInfoFromFile(filePath, parentKey);
+        if (parentJsonStr == null) {
+            return null;
+        }
+
+        try {
+            JSONObject parentJson = JSON.parseObject(parentJsonStr);
+            return parentJson.getString(childKey);
+        } catch (Exception e) {
+            System.err.println("解析嵌套JSON[" + parentKey + "." + childKey + "]失败：" + e.getMessage());
+            return null;
+        }
+    }
+
     // 加载角色信息，优先尝试从本地加载，如果本地加载不到就先尝试爬取prts上的信息，然后保存到本地上
     @Override
-    public CharacterInformation loadCharacterInformation(String characterName){
+    public CharacterInformation loadCharacterInformation(String characterId, String characterName) {
         // -----------------------------动态拼接文件路径-------------------- //
         // 角色数据存储目录
         String characterDir = getAbsolutePath(CHARACTER_DATA_PATH);
@@ -69,65 +118,63 @@ public class LoadCharacterInformationServiceImpl implements LoadCharacterInforma
         }
 
         //构建本地角色数据文件路径
-        String CharacterFilePath = characterDir + File.separator + characterName + ".json";
-        File LocalFile = new File(CharacterFilePath);
+        String characterFilePath = characterDir + File.separator + characterName + ".json";
+        String FavorPath = getAbsolutePath(FAVOR_PATH) +  File.separator + characterId + ".json";
+
+        File localFile = new File(characterFilePath);
 
         //尝试从本地文件获取角色数据信息
-        if(LocalFile.exists() &&  LocalFile.isFile()){
-            return loadFromLocalFile(LocalFile,characterName);
+        if(localFile.exists() &&  localFile.isFile()){
+            return loadFromLocalFile(characterFilePath, characterName,FavorPath);
         }
 
         // 本地文件不存在，尝试调用python的方法获取
         CharacterInformation crawlInfo = crawlByPythonScript(characterName,pythonScriptPath,pythonInterpreterPath);
 
         //爬取成功，尝试将角色信息保存到本地
-        boolean saveSuccess = saveToLocalFile(crawlInfo,CharacterFilePath);
+        boolean saveSuccess = saveToLocalFile(crawlInfo,characterFilePath);
         if(!saveSuccess){
-            System.out.println("角色信息爬取成功，但保存到本地失败" + CharacterFilePath);
+            System.out.println("角色信息爬取成功，但保存到本地失败" + characterFilePath);
         }
 
         return crawlInfo;
     }
 
     //从本地文件加载角色信息
-    private CharacterInformation loadFromLocalFile(File localFile,String characterName){
-        CharacterInformation Info = new CharacterInformation();
-        try(BufferedReader reader = new BufferedReader(
-                new InputStreamReader(Files.newInputStream(localFile.toPath()), StandardCharsets.UTF_8))){
+    private CharacterInformation loadFromLocalFile(String characterFilePath, String characterName,String FavorPath){
+        CharacterInformation info = new CharacterInformation();
 
-            //读取文件内容并解析为JSON
-            StringBuilder stringBuilder = new StringBuilder();
-            String line;
+        try {
+            // 调用抽取的函数读取基础信息
+            info.setName(getCharacterInfoFromFile(characterFilePath, "name"));
+            info.setProfession(getCharacterInfoFromFile(characterFilePath, "class"));
+            info.setCamp(getCharacterInfoFromFile(characterFilePath, "group"));
+            info.setExperience(getCharacterInfoFromFile(characterFilePath, "experience"));
+            info.setLevel_up(getCharacterInfoFromFile(characterFilePath, "level_up"));
+            info.setFavor(Integer.parseInt(getCharacterInfoFromFile(FavorPath, "current_favor")));
 
-            while((line = reader.readLine()) != null){
-                stringBuilder.append(line);
+            System.out.println(info.getName());
+            System.out.println(info.getProfession());
+            System.out.println(info.getCamp());
+            System.out.println(info.getExperience());
+            System.out.println(info.getLevel_up());
+            System.out.println(info.getFavor());
+
+
+            // 调用扩展函数读取嵌套的file_data信息
+            String[] fileData = new String[4];
+            for(int i = 0; i < 4; i++){
+                fileData[i] = getNestedCharacterInfoFromFile(characterFilePath, "file_data", String.valueOf(i));
             }
-            JSONObject jsonObject = JSON.parseObject(stringBuilder.toString());
-
-            Info.setName(jsonObject.getString("name"));
-            Info.setProfession(jsonObject.getString("class"));
-            Info.setCamp(jsonObject.getString("group"));
-            Info.setExperience(jsonObject.getString("experience"));
-            Info.setLevel_up(jsonObject.getString("level_up"));
-            Info.setFavor(jsonObject.getInteger("favor"));
-
-            //处理file_data数组
-            JSONObject fileDataJson = jsonObject.getJSONObject("file_data");
-            if(fileDataJson != null){
-                String[] fileData = new String[4];
-                for(int i = 0; i < 4; i++){
-                    fileData[i] = fileDataJson.getString(String.valueOf(i));
-                }
-                Info.setFile_data(fileData);
-            }
+            info.setFile_data(fileData);
 
             System.out.println("成功加载本地角色" + characterName + "信息");
-        }catch(IOException e){
-            Info.setError("加载本次角色" + characterName + "信息失败");
+        } catch (Exception e) {
+            info.setError("加载本地角色" + characterName + "信息失败");
             System.out.println(e.getMessage());
             e.printStackTrace();
         }
-        return Info;
+        return info;
     }
 
     //使用python加载角色信息
@@ -221,25 +268,26 @@ public class LoadCharacterInformationServiceImpl implements LoadCharacterInforma
     }
 
     //将角色信息保存到本地文件中
-    private boolean saveToLocalFile(CharacterInformation Info,String savePath){
+    private boolean saveToLocalFile(CharacterInformation info,String savePath){
         try(BufferedWriter writer = new BufferedWriter(
                 new OutputStreamWriter(Files.newOutputStream(Paths.get(savePath)),StandardCharsets.UTF_8))){
 
             // 将实体类转换为JSON对象
             JSONObject jsonObject = new  JSONObject();
-            jsonObject.put("name", Info.getName());
-            jsonObject.put("class", Info.getProfession());
-            jsonObject.put("group", Info.getCamp());
-            jsonObject.put("experience", Info.getExperience());
-            jsonObject.put("level_up", Info.getLevel_up());
-            jsonObject.put("favor", Info.getFavor());
+            jsonObject.put("name", info.getName());
+            jsonObject.put("class", info.getProfession());
+            jsonObject.put("group", info.getCamp());
+            jsonObject.put("experience", info.getExperience());
+            jsonObject.put("level_up", info.getLevel_up());
+            jsonObject.put("favor", info.getFavor());
 
             JSONObject fileDataJson = new  JSONObject();
-            if (Info.getFile_data() != null) {
+            if (info.getFile_data() != null) {
                 for(int i = 0; i < 4; i++){
-                    fileDataJson.put(String.valueOf(i), Info.getFile_data()[i]);
+                    fileDataJson.put(String.valueOf(i), info.getFile_data()[i]);
                 }
             }
+            jsonObject.put("file_data", fileDataJson); // 补充缺失的file_data写入
 
             writer.write(JSON.toJSONString(jsonObject,true));
             System.out.println("角色信息已保存到本地");

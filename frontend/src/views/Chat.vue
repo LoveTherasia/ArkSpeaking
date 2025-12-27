@@ -27,7 +27,7 @@ const userAvatar = "http://localhost:5173/src/assets/user.jpg";//角色头像
 const isLoading = ref(false);
 const rightLoading = ref(false); // 右侧角色信息加载状态
 const characterDetail = ref(null); // 存储从后端获取的角色详细信息
-const favor = ref(null);//角色好感度值
+const favor = ref(0);//角色好感度值 - 【修改】初始值设为0，避免显示异常
 
 // 用于取消异步请求的控制器
 let abortController = null;
@@ -118,6 +118,7 @@ const fetchData = async (targetCharacterId, characterName) => {
     try{
         const response = await axios.get("/chat/fetch",{
             params:{
+                characterId: targetCharacterId,
                 characterName: characterName
             },
             signal: abortController.signal // 绑定取消信号
@@ -127,6 +128,7 @@ const fetchData = async (targetCharacterId, characterName) => {
             
         console.log("角色详细信息：", response.data);
         characterDetail.value = response.data; // 存储角色详细信息
+        favor.value = response.data.favor || 0; // 初始化好感度值
     } catch (error) {
         // 忽略取消请求的错误
         if (error.name !== 'AbortError') {
@@ -189,6 +191,7 @@ watch(
         // 重置状态
         rightLoading.value = true;
         characterDetail.value = null; // 切换角色时清空详情
+        favor.value = 0; // 【新增】切换角色时重置好感度为0
         currentLoadingCharacterId = newCharacterId;
 
         try {
@@ -266,6 +269,7 @@ const simulateAIResponse = () => {
         })
 
         console.log("AI回复：", reply.data);
+        favor.value = reply.data.favor; // 更新好感度值
 
         messages.value.push({
             sender: 'ai',
@@ -354,10 +358,22 @@ const closeDialog = () => {
 
         <!-- 中间聊天部分 -->
         <div class="main">
-            <!-- 头部显示区域 -->
+            <!-- 头部显示区域 - 【修改】添加好感度条 -->
             <div class="header">
-                <div>
-                <p>{{ currentCharacter ? currentCharacter.name : '' }}</p>
+                <div class="header-content">
+                    <p>{{ currentCharacter ? currentCharacter.name : '' }}</p>
+                    <!-- 好感度条区域 -->
+                    <div class="favor-container" v-if="currentCharacter">
+                        <div class="favor-label">
+                            好感度: {{ favor }}/200
+                        </div>
+                        <div class="favor-bar-wrapper">
+                            <div 
+                                class="favor-bar" 
+                                :style="{ width: `${Math.min((favor/200)*100, 100)}%` }"
+                            ></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -549,19 +565,58 @@ const closeDialog = () => {
 
 .header {
     width: 100%;
-    height: 60px;
+    height: 80px; /* 【修改】增高头部高度以容纳好感度条 */
     background-color: #f5f7fa;
     /* 设置边框 */
     border-bottom: 1px solid #908f8f6a;
     border-left: 1px solid #908f8f6a;
+    display: flex;
+    align-items: center; /* 垂直居中 */
+    padding: 0 16px;
+    box-sizing: border-box;
+}
+
+/* 【新增】头部内容容器 */
+.header-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .header p {
     font-size: 20px;
     font-weight: bold;
-    line-height: 60px;
-    margin-left: 16px;
+    line-height: 1; /* 【修改】重置行高 */
+    margin: 0; /* 【修改】重置外边距 */
     color: #2d3748;
+}
+
+/* 【新增】好感度条样式 */
+.favor-container {
+    width: 100%;
+    max-width: 400px; /* 限制好感度条最大宽度 */
+}
+
+.favor-label {
+    font-size: 14px;
+    color: #4a5568;
+    margin-bottom: 4px;
+}
+
+.favor-bar-wrapper {
+    width: 100%;
+    height: 8px;
+    background-color: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.favor-bar {
+    height: 100%;
+    background-color: #48bb78; /* 绿色进度条，可根据需要修改 */
+    border-radius: 4px;
+    transition: width 0.3s ease; /* 平滑过渡效果 */
 }
 
 .message-container {
@@ -788,6 +843,11 @@ const closeDialog = () => {
     .input-area {
         height: 120px;
         padding: 10px 12px;
+    }
+
+    /* 移动端调整好感度条宽度 */
+    .favor-container {
+        max-width: 100%;
     }
 }
 
