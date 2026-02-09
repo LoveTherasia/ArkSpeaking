@@ -1,0 +1,52 @@
+        <!-- 右侧角色设定展示区域 -->
+        <div class="right">
+            <!-- 右侧加载动画 -->
+            <div class="right-loading-container" v-if="rightLoading">
+                <div class="right-loading-content">
+                    <Loading class="right-loading-icon" />
+                    <span class="right-loading-text">正在加载角色信息...</span>
+                </div>
+            </div>
+
+            <!-- 角色信息展示（结合后端返回的详细信息） -->
+            <div class="character-information" v-else-if="currentCharacter && characterDetail">
+                <!-- 角色基础信息（头像+名称） -->
+                <div class="character-info-header">
+                    <img :src="currentCharacter.avatar" alt="characterDetail.name" class="character-info-avatar">
+                    <h2 class="character-info-name">{{ characterDetail.name || currentCharacter.name }}</h2>
+                </div>
+
+                <!-- 角色核心信息 -->
+                <div class="character-info-body">
+                    <!-- 基础属性 -->
+                    <div class="info-group">
+                        <div class="info-item">
+                            <span class="info-label">角色ID：</span>
+                            <span class="info-value">{{ currentCharacter.characterId }}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">职业：</span>
+                            <span class="info-value">{{ characterDetail.profession || '暂无' }}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">阵营：</span>
+                            <span class="info-value">{{ characterDetail.camp || '暂无' }}</span>
+                        </div>
+                    </div>
+
+                    <!-- 角色履历 -->
+                    <div class="info-group">
+                        <h3 class="group-title">角色履历</h3>
+                        <div class="info-item full-width">
+                            <span class="info-value">{{ characterDetail.experience || '暂无' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        
+            <!-- 无角色/无详情时的占位 -->
+            <div class="no-character" v-else>
+                <p>{{ currentCharacter ? '暂无角色详细信息' : '暂无选中的角色' }}</p>
+            </div>
+        </div>

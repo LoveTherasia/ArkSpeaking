@@ -22,7 +22,7 @@
   },
   {
     "id": 4,
-    "name": "特蕾西娅",
+    "name": "魔王",
     "characterId": "theresa",
     "avatar": "../assets/theresa-01.jpg",
     "route": "/chat/theresa"

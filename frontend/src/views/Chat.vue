@@ -1,1148 +1,1044 @@
 <script setup>
-//src/views/Chat.vue
-//聊天页面设计
-
-//引入依赖
 import { ref, onMounted, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { loadCharacter } from '@/utils/loadCharacter';
 import axios from 'axios';
 
-import { Loading } from '@element-plus/icons-vue';
+import { 
+  Loading, 
+  UserFilled, 
+  ChatDotRound, 
+  Postcard 
+} from '@element-plus/icons-vue';
 
 axios.defaults.baseURL = 'http://localhost:8080';
 
-//路由相关
 const route = useRoute();
 const router = useRouter();
-
-//状态管理  
-const characterList = ref([]);//角色列表
-const currentCharacter = ref(null);//当前对话角色
-const messages = ref([]);//消息列表
-const inputMessage = ref("");//输入消息
-const messageContainer = ref(null);//消息容器
-const userAvatar = "http://localhost:5173/src/assets/user.jpg";//角色头像
-
+const characterList = ref([]);
+const currentCharacter = ref(null);
+const messages = ref([]);
+const inputMessage = ref("");
+const messageContainer = ref(null);
+const lastMessages = ref({});
 const isLoading = ref(false);
-const rightLoading = ref(false); // 右侧角色信息加载状态
-const characterDetail = ref(null); // 存储从后端获取的角色详细信息
-const favor = ref(0);//角色好感度值 - 【修改】初始值设为0，避免显示异常
+const rightLoading = ref(false);
+const characterDetail = ref(null);
+const favor = ref(0);
 
-// 用于取消异步请求的控制器
 let abortController = null;
-// 当前正在加载的角色ID
 let currentLoadingCharacterId = null;
 
-// 手动切换加载状态调试
-const testLoading = () => {
-  isLoading.value = !isLoading.value;
+// 视图模式
+const currentViewMode = ref(route.query.view || 'characterChat');
+const currentDetailCharacter = ref(null);
+
+// 朋友圈状态
+const momentList = ref([]);        
+const isMomentGenerating = ref(false);
+
+// 用户信息（左侧朋友圈模式展示）
+const userInfo = ref({
+  nickname: "博士",
+  avatar: "http://localhost:5173/src/assets/user.jpg", // 保留默认值（降级）
+  signature: "与角色们的日常"
+});
+
+// 工具方法
+//截断文本
+const truncateText = (text, max = 20) => 
+  text?.length > max ? text.slice(0, max) + "..." : text || "";
+
+//获取当天日期字符串
+const getTodayString = () => new Date().toISOString().split('T')[0];
+
+//判断当天是否产生过朋友圈
+const hasGeneratedToday = () => {
+  const lastDate = localStorage.getItem('lastMomentDate');
+  return lastDate === getTodayString();
 };
 
-//包装聊天信息
-const createChatMessage = (senderId, receiverId, content) => {
-    return {
-        senderId: senderId,
-        receiverId: receiverId,
-        content: content
-    };
+//随机选择角色
+const randomCharacter = () => {
+  if (!characterList.value.length) return null;
+  const idx = Math.floor(Math.random() * characterList.value.length);
+  return characterList.value[idx];
 };
 
-//将聊天信息发送到后端存储
-const saveChatMessage = async (message) => {
-    try {
-        await axios.post('/chat/save', {
-            sendId: message.sendId,
-            chatId: message.chatId,
-            content: message.content
-        });
-        console.log("信息发送成功");
-    } catch (error) {
-        // 忽略取消请求的错误
-        if (error.name !== 'AbortError') {
-            console.error("信息存储失败", error);
-            alert("信息存储失败!");
-        }
+// 视图切换
+const switchViewMode = async (mode) => {
+  currentViewMode.value = mode;
+  
+  if (mode === 'moment' && characterList.value.length > 0) {
+    if (!hasGeneratedToday()) {
+      await generateOneCharacterMoment();
     }
+  }
+
+  if (mode === 'characterDetail' && currentCharacter.value) {
+    currentDetailCharacter.value = currentCharacter.value;
+    await fetchData(currentCharacter.value.characterId, currentCharacter.value.name);
+  }
+};
+
+// 生成1条角色朋友圈（当天仅一次） 
+const generateOneCharacterMoment = async () => {
+  if (isMomentGenerating.value) return;
+  //获取随机角色
+  const char = randomCharacter();
+  if (!char) return;
+
+  //记录状态为true，防止出现多个进程同时生成朋友圈的情况
+  isMomentGenerating.value = true;
+  try {
+    const res = await axios.post('/moment/generate', {
+      characterId: char.characterId,
+      characterName: char.name,
+      characterBrief: char.brief || "一个有趣的角色"
+    });
+
+    const moment = {
+      id: Date.now(),
+      character: char,
+      content: res.data.content,
+      createTime: new Date().toLocaleString(),
+      like: 0,
+      isLiked: false
+    };
+    
+    //将该朋友圈插入
+    momentList.value.unshift(moment);
+    localStorage.setItem('lastMomentDate', getTodayString());
+    //保存到本地
+    saveMomentToLocal();
+
+  } catch (err) {
+    console.error("朋友圈生成失败", err);
+    momentList.value.unshift({
+      id: Date.now(),
+      character: char,
+      content: `${char.name} 今天什么也没说～`,
+      createTime: new Date().toLocaleString(),
+      like: 0, 
+      isLiked: false
+    });
+    localStorage.setItem('lastMomentDate', getTodayString());
+  } finally {
+    isMomentGenerating.value = false;
+  }
+};
+
+// 朋友圈点赞
+const toggleLike = (moment) => {
+  moment.isLiked = !moment.isLiked;
+  moment.like += moment.isLiked ? 1 : -1;
+
+  saveMomentToLocal();
+};
+
+//读取本地存储的朋友圈列表
+const loadMomentFromLocal = () => {
+  const savedMoments = localStorage.getItem('momentList');
+  if(savedMoments){
+    momentList.value = JSON.parse(savedMoments);
+  }
 }
 
-//从后端读取聊天记录
+//保存朋友圈里表到本地存储
+const saveMomentToLocal = () =>{
+  localStorage.setItem('momentList',JSON.stringify(momentList.value));
+}
+
+// 跳转用户编辑页
+const goToUserEdit = () => {
+  router.push({
+    name: 'UserEdit',
+    query: {
+      characterId: route.params.characterId,
+      view: currentViewMode.value
+    }
+  });
+};
+
+
+const testLoading = () => { isLoading.value = !isLoading.value; };
+const createChatMessage = (senderId, receiverId, content) => ({ senderId, receiverId, content });
+
+const saveChatMessage = async (message) => {
+  try { await axios.post('/chat/save', message); } 
+  catch (e) { if (e.name !== 'AbortError') console.error("存消息失败", e); }
+};
+
 const readChatMessage = async (targetCharacterId) => {
-    if(!targetCharacterId) return;
-    // 取消之前未完成的请求
-    if (abortController) {
-        abortController.abort();
+  if (!targetCharacterId) return;
+  if (abortController) abortController.abort();
+  abortController = new AbortController();
+
+  try {
+    const res = await axios.get('/chat/read', {
+      params: { characterId: targetCharacterId },
+      signal: abortController.signal
+    });
+    if (targetCharacterId !== currentLoadingCharacterId) return;
+
+    const msgs = Array.isArray(res.data) ? res.data : [];
+    messages.value = msgs.map(m => ({
+      sender: m.sendId === targetCharacterId ? 'ai' : 'user',
+      content: m.content
+    }));
+    if (msgs.length) {
+      lastMessages.value[targetCharacterId] = msgs.at(-1).content;
+    } else {
+      lastMessages.value[targetCharacterId] = "";
     }
-    // 创建新的控制器
-    abortController = new AbortController();
-    
-    try {
-        const response = await axios.get("/chat/read", {
-            params: {
-                characterId: targetCharacterId
-            },
-            signal: abortController.signal // 绑定取消信号
-        });
-
-        if (targetCharacterId !== currentLoadingCharacterId) return;
-
-        const backendMessages = Array.isArray(response.data) ? response.data : [];
-        console.log(backendMessages);
-
-        messages.value = backendMessages.map(msg => ({
-            sender:msg.sendId === targetCharacterId ? 'ai' : 'user',
-            content: msg.content,
-        }))
-
-        console.log("聊天记录加载成功", messages.value);
-        scrollToBottom();
-    } catch (error) {
-        // 忽略取消请求的错误
-        if (error.name !== 'AbortError') {
-            console.error("信息读取失败！", error.response?.data?.msg || error.message);
-            alert("信息读取失败!");
-        }
-    }
+    scrollToBottom();
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error("读聊天记录失败", e);
+  }
 };
 
-//从后端获取角色详细信息
 const fetchData = async (targetCharacterId, characterName) => {
-    if(!targetCharacterId || !characterName) return;
-    // 取消之前未完成的请求
-    if (abortController) {
-        abortController.abort();
-    }
-    // 创建新的控制器
-    abortController = new AbortController();
-    
-    try{
-        const response = await axios.get("/chat/fetch",{
-            params:{
-                characterId: targetCharacterId,
-                characterName: characterName
-            },
-            signal: abortController.signal // 绑定取消信号
-        });
+  if (!targetCharacterId || !characterName) return;
+  if (abortController) abortController.abort();
+  abortController = new AbortController();
+  rightLoading.value = true;
 
-        if (targetCharacterId !== currentLoadingCharacterId) return;
-            
-        console.log("角色详细信息：", response.data);
-        characterDetail.value = response.data; // 存储角色详细信息
-        favor.value = response.data.favor || 0; // 初始化好感度值
-    } catch (error) {
-        // 忽略取消请求的错误
-        if (error.name !== 'AbortError') {
-            console.error("角色详细信息读取失败！", error.response?.data?.msg || error.message);
-            // 仅当请求未被取消且是当前角色时，才清空详情
-            if (targetCharacterId === currentLoadingCharacterId) {
-                characterDetail.value = null;
-            }
-        }
-    }
+  try {
+    const res = await axios.get('/chat/fetch', {
+      params: { characterId: targetCharacterId, characterName },
+      signal: abortController.signal
+    });
+    if (targetCharacterId !== currentLoadingCharacterId) return;
+    characterDetail.value = res.data;
+    favor.value = res.data.favor || 0;
+  } catch (e) {
+    if (e.name !== 'AbortError') characterDetail.value = null;
+  } finally {
+    if (currentLoadingCharacterId === targetCharacterId) rightLoading.value = false;
+  }
 };
 
-//加载角色数据
+//选择角色逻辑
+const selectDetailCharacter = async (char) => {
+  currentDetailCharacter.value = char;
+  currentLoadingCharacterId = char.characterId;
+  await fetchData(char.characterId, char.name);
+};
+
+//从路由中读取viewMode
+const initViewModeFromRoute = () => {
+  const viewMode = route.query.view || 'characterChat';
+  currentViewMode.value = viewMode;
+}
+
 onMounted(async () => {
-    try{
-        characterList.value = await loadCharacter();
-        await initCurrentCharacter();
-    } catch (error) {
-        console.error("角色初始化失败：", error);
+  try {
+    characterList.value = await loadCharacter();
+    //初始化角色
+    await initCurrentCharacter();
+    // 加载本地存储的朋友圈
+    loadMomentFromLocal();
+    //加载本地存储的用户信息
+    const savedUser = localStorage.getItem('userInfo');
+    if(savedUser){
+      userInfo.value = JSON.parse(savedUser);
     }
-}); 
-
-// 初始化当前角色（抽离逻辑，解决时序问题）
-const initCurrentCharacter = async () => {
-    const characterId = route.params.characterId;
-    if (!characterId || !characterList.value.length) return;
-
-    rightLoading.value = true;
-
-    currentLoadingCharacterId = characterId;
-    
+    // 从后端拉取最新用户信息
     try {
-        const newCharacter = characterList.value.find(c => c.characterId === characterId) || null;
-        if(!newCharacter){
-            console.warn("不存在该角色：", characterId);
-            router.push("/");
-            return;
-        }
-
-        currentCharacter.value = newCharacter;
-        await readChatMessage(characterId); // 传入目标角色ID
-        await fetchData(characterId, newCharacter.name); // 传入目标角色ID和名称
-        console.log("当前角色初始化完成：", currentCharacter.value);
-    } catch (error) {
-        console.error("角色初始化失败：", error);
-    } finally {
-        // 仅当当前加载的角色ID和初始化的ID一致时，才关闭加载
-        if (currentLoadingCharacterId === characterId) {
-            rightLoading.value = false;
-        }
+      const res = await axios.post('/user/info');
+      if (res.data) {
+        userInfo.value = res.data;
+        // 同步到本地存储
+        localStorage.setItem('userInfo', JSON.stringify(res.data));
+      }
+    } catch (err) {
+      console.error("获取后端用户信息失败，使用本地存储", err);
     }
+
+  } catch (e) { console.error("角色初始化失败", e); }
+});
+
+//监听视图模式变化,同步更新到query
+watch(currentViewMode, (newMode) => {
+  if(route.query.view != newMode){
+    //只有当前视图模式和切换的视图模式不一样的时候进行更新
+    router.replace({
+      name: 'Chat',
+      params: {characterId: route.params.characterId},
+      query:{view: newMode}
+    });
+  }
+});
+
+// 监听路由变化，同步更新视图模式
+watch([() => route.query.view, () => route.params.characterId],([newView,newCid]) => {
+  if(newView){
+    currentViewMode.value = newView;
+  }
+})
+
+//获取当前完整聊天路由
+const getCurrentChatRoute = () => {
+  return {
+    name: 'Chat',
+    params: {characterId: route.params.characterId},
+    query: {view: currentViewMode.value} 
+  };
 };
 
-//监听角色端口变化(用户切换对话角色)
+const initCurrentCharacter = async () => {
+  const cid = route.params.characterId;
+  if (!cid || !characterList.value.length) return;
+  currentLoadingCharacterId = cid;
+
+  try {
+    const char = characterList.value.find(c => c.characterId === cid);
+    if (!char) { router.push('/'); return; }
+    currentCharacter.value = char;
+    if (currentViewMode.value === 'characterDetail') currentDetailCharacter.value = char;
+    await readChatMessage(cid);
+    await fetchData(cid, char.name);
+  } catch (e) { console.error("initCurrentCharacter err", e); }
+};
+
 watch(
-    () => route.params.characterId,
-    async (newCharacterId) => {
-        if (!characterList.value.length || !newCharacterId) return;
-        
-        // 重置状态
-        rightLoading.value = true;
-        characterDetail.value = null; // 切换角色时清空详情
-        favor.value = 0; // 【新增】切换角色时重置好感度为0
-        currentLoadingCharacterId = newCharacterId;
+  () => route.params.characterId,
+  async (newId) => {
+    if (!characterList.value.length || !newId) return;
+    rightLoading.value = true;
+    characterDetail.value = null;
+    favor.value = 0;
+    currentLoadingCharacterId = newId;
 
-        try {
-            //查找新角色
-            const newCharacter = characterList.value.find(c => c.characterId === newCharacterId) || null;
-            if(!newCharacter){
-                alert("不存在该角色" + newCharacterId);
-                router.push("/");
-                return;
-            }
-
-            currentCharacter.value = newCharacter;
-            await readChatMessage(newCharacterId); // 传入目标角色ID
-            await fetchData(newCharacterId, newCharacter.name); // 传入目标角色ID和名称
-            console.log("当前角色:", currentCharacter.value);
-        } catch (error) {
-            // 忽略取消请求的错误
-            if (error.name !== 'AbortError') {
-                console.error("角色信息加载失败", error);
-            }
-        } finally {
-            // 仅当当前加载的角色ID和新角色ID一致时，才关闭加载
-            if (currentLoadingCharacterId === newCharacterId) {
-                rightLoading.value = false;
-            }
-        }
-    },
-    { immediate: true }
+    try {
+      const char = characterList.value.find(c => c.characterId === newId);
+      if (!char) { alert("角色不存在"); router.push('/'); return; }
+      currentCharacter.value = char;
+      if (currentViewMode.value === 'characterDetail') currentDetailCharacter.value = char;
+      await readChatMessage(newId);
+      await fetchData(newId, char.name);
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error("切换角色失败", e);
+    } finally {
+      if (currentLoadingCharacterId === newId) rightLoading.value = false;
+    }
+  },
+  { immediate: true }
 );
 
-//发送聊天消息
 const sendMessage = () => {
-    if (!inputMessage.value.trim()) {
-        alert("请输入消息内容！");
-        return;
-    }
+  const txt = inputMessage.value.trim();
+  if (!txt) { alert("请输入内容"); return; }
+  messages.value.push({ sender: 'user', content: txt, time: new Date().toLocaleTimeString() });
+  if (currentCharacter.value) lastMessages.value[currentCharacter.value.characterId] = txt;
+  
+  saveChatMessage({
+    sendId: 'user',
+    chatId: currentCharacter.value.characterId,
+    content: txt
+  });
+  inputMessage.value = "";
+  scrollToBottom();
+  simulateAIResponse();
+};
 
-    messages.value.push({
-        sender: 'user',
-        content: inputMessage.value.trim(),
-        time: new Date().toLocaleTimeString(),
-    });
-
-    saveChatMessage({
-        sendId: 'user',
-        chatId: currentCharacter.value.characterId,
-        content: inputMessage.value.trim(),
-    });
-
-    inputMessage.value = "";//输出完之后清空输入框
-    scrollToBottom();//滚动到底部
-
-    simulateAIResponse();//模拟AI回复
-}
-
-//AI回复
 const simulateAIResponse = () => {
-    if (!currentCharacter.value) return;
-    
-    isLoading.value = true;
-    console.log("加载中...", isLoading.value);
-    
-    const currentReplyCharacterId = currentCharacter.value.characterId;
-    
-    setTimeout(async () => {
-        // 校验：如果当前角色已切换，不再处理旧回复
-        if (currentCharacter.value?.characterId !== currentReplyCharacterId) {
-            isLoading.value = false;
-            return;
-        }
+  if (!currentCharacter.value) return;
+  isLoading.value = true;
+  const replyCid = currentCharacter.value.characterId;
 
-        const reply = await axios.post('/chat/ai',{
-            chatId: currentCharacter.value.characterId,
-            content:messages.value.filter(msg => msg.sender === 'user').slice(-1)[0].content
-        })
-
-        console.log("AI回复：", reply.data);
-        favor.value = reply.data.favor; // 更新好感度值
-
-        messages.value.push({
-            sender: 'ai',
-            content: reply.data.content,
-            time: new Date().toLocaleTimeString(),
-        });
-        scrollToBottom();//滚动到底部
-
-        saveChatMessage({
-            sendId: currentCharacter.value.characterId,
-            chatId: currentCharacter.value.characterId,
-            content: reply.data.content,
-        });
-
-        isLoading.value = false;
-        console.log("加载结束", isLoading.value);
-    }, 2000);
-}
-
-//监听输入框，如果有回车就发送消息
-const handleKeyDown = (event) => {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        sendMessage();
+  setTimeout(async () => {
+    if (currentCharacter.value?.characterId !== replyCid) {
+      isLoading.value = false; 
+      return;
     }
-}
+    const lastUserMsg = messages.value.filter(m => m.sender === 'user').at(-1)?.content || "";
+    const res = await axios.post('/chat/ai', {
+      chatId: currentCharacter.value.characterId,
+      content: lastUserMsg
+    });
+    favor.value = res.data.favor;
+    lastMessages.value[replyCid] = res.data.content;
+    messages.value.push({
+      sender: 'ai', 
+      content: res.data.content, 
+      time: new Date().toLocaleTimeString()
+    });
+    scrollToBottom();
+    saveChatMessage({
+      sendId: currentCharacter.value.characterId,
+      chatId: currentCharacter.value.characterId,
+      content: res.data.content
+    });
+    isLoading.value = false;
+  }, 2000);
+};
 
-//滚动到底部
+const handleKeyDown = (e) => {
+  if (e.key === 'Enter') { 
+    e.preventDefault(); 
+    sendMessage(); 
+  }
+};
+
 const scrollToBottom = () => {
-    nextTick(() => {
-        if (messageContainer.value) {
-            messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
-        }
-    });
-}
+  nextTick(() => {
+    if (messageContainer.value) {
+      messageContainer.value.scrollTop = messageContainer.value.scrollHeight;
+    }
+  });
+};
 
-//切换角色事件
-const switchCharacter = (characterId) => {
-    router.push({
-        name: 'Chat',
-        params: { characterId },
-    });
-}
+const switchCharacter = (cid) => {
+  router.push({ name: 'Chat', params: { characterId: cid } });
+};
 
-//角色信息弹窗控制
 const dialogVisible = ref(false);
-
-const openDialog = () => {
-    console.log("打开弹窗");
-    dialogVisible.value = true;
-};
-
-const closeDialog = () => {
-    dialogVisible.value = false;
-};
+const openDialog = () => dialogVisible.value = true;
+const closeDialog = () => dialogVisible.value = false;
 </script>
 
 <template>
-    <div class="chat-home">
-    <!-- 角色详细信息弹窗 -->
-    <el-dialog title="角色详细信息" :model-value="dialogVisible" @update:model-value="dialogVisible = $event" width="400px" height="400px" @close="closeDialog" z-index="1000">
-        <div v-if="characterDetail">
-            <img :src="currentCharacter.avatar" alt="">
-            <p><strong>姓名:</strong> {{ characterDetail.name }}</p>
-        </div>
-        <div v-else>
-            <p>暂无角色详细信息</p>
-        </div>
+  <div class="chat-home">
+    <el-dialog title="角色详细信息" v-model="dialogVisible" width="400px" z-index="1000">
+      <div v-if="characterDetail" class="dialog-info">
+        <img :src="currentCharacter?.avatar" class="dialog-avatar" alt="" />
+        <p><strong>姓名：</strong>{{ characterDetail.name }}</p>
+        <p><strong>好感度：</strong>{{ favor }}/200</p>
+        <p v-if="characterDetail.brief"><strong>简介：</strong>{{ characterDetail.brief }}</p>
+      </div>
+      <div v-else><p>暂无角色信息</p></div>
     </el-dialog>
 
-        <!-- 角色聊天列表 -->
-        <div class="left">
-            <div class="character-card" v-for="character in characterList" :key="character.id" @click="switchCharacter(character.characterId)" :class="{ active: currentCharacter && currentCharacter.characterId === character.characterId }">
-                <div>
-                    <div class="character-box-avatar" :style="{ backgroundImage: `url(${character.avatar})` }"></div>
-                    <div class="character-name">{{ character.name }}</div>
-                </div>
+    <div class="left">
+      <div class="view-tabs">
+        <button class="tab-btn" :class="{ active: currentViewMode === 'characterDetail' }"
+          @click="switchViewMode('characterDetail')" title="角色详情">
+          <UserFilled class="tab-icon" />
+        </button>
+        <button class="tab-btn" :class="{ active: currentViewMode === 'characterChat' }"
+          @click="switchViewMode('characterChat')" title="角色聊天">
+          <ChatDotRound class="tab-icon" />
+        </button>
+        <button class="tab-btn" :class="{ active: currentViewMode === 'moment' }"
+          @click="switchViewMode('moment')" title="朋友圈">
+          <Postcard class="tab-icon" />
+        </button>
+      </div>
+
+      <div v-if="['characterDetail', 'characterChat'].includes(currentViewMode)" class="left-content">
+        <div v-if="currentViewMode === 'characterChat'" class="character-list">
+          <div v-for="char in characterList" :key="char.characterId"
+            class="character-card" :class="{ active: currentCharacter?.characterId === char.characterId }"
+            @click="switchCharacter(char.characterId)">
+            <div class="char-avatar" :style="{ backgroundImage: `url(${char.avatar})` }"></div>
+            <div class="char-info">
+              <div class="char-name">{{ char.name }}</div>
+              <div class="char-lastMsg">{{ truncateText(lastMessages[char.characterId], 18) }}</div>
             </div>
-
-            <button @click="testLoading" style="margin-top:20px;padding:8px 16px;cursor:pointer;">
-                    测试加载状态
-            </button>
-
-            <button @click="openDialog">角色详细信息</button>
+          </div>
         </div>
 
-        <!-- 中间聊天部分 -->
-        <div class="main">
-            <!-- 头部显示区域 - 【修改】添加好感度条 -->
-            <div class="header">
-                <div class="header-content">
-                    <p>{{ currentCharacter ? currentCharacter.name : '' }}</p>
-                    <!-- 好感度条区域 -->
-                    <div class="favor-container" v-if="currentCharacter">
-                        <div class="favor-label">
-                            好感度: {{ favor }}/200
-                        </div>
-                        <div class="favor-bar-wrapper">
-                            <div 
-                                class="favor-bar" 
-                                :style="{ width: `${Math.min((favor/200)*100, 100)}%` }"
-                            ></div>
-                        </div>
-                    </div>
-                </div>
+        <div v-else class="character-detail-list">
+          <div v-for="char in characterList" :key="char.characterId"
+            class="detail-card" :class="{ active: currentDetailCharacter?.characterId === char.characterId }"
+            @click="selectDetailCharacter(char)">
+            <div class="detail-avatar" :style="{ backgroundImage: `url(${char.avatar})` }"></div>
+            <div class="detail-info">
+              <div class="detail-name">{{ char.name }}</div>
+              <div class="detail-brief">{{ truncateText(char.brief, 12) }}</div>
             </div>
-
-            <!-- 信息显示区域 -->
-            <div class="message-container" ref="messageContainer">
-                <!-- 原有消息列表 -->
-                <div v-for="(message, index) in messages" :key="index" :class="['message', message.sender === 'user' ? 'user-message' : 'ai-message']">
-                    <img :src="message.sender === 'user' ? userAvatar : currentCharacter?.avatar"
-                        alt="message.sender === user ? '我' : currentCharacter?.name "
-                        class="avatar">
-                    <div class="message-content">{{ message.content }}</div>
-                </div>
-
-                <!-- 加载状态 -->
-                <div class="ai-loading" v-if="isLoading">
-                    <img :src="currentCharacter?.avatar || userAvatar" alt="加载中" class="avatar">
-                    <div class="loading-container">
-                        <!-- Loading图标 + 旋转动画 -->
-                        <Loading class="loading-icon" />
-                        <span class="loading-text">{{ currentCharacter?.name || 'AI' }}正在思考...</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 输入区域 -->
-            <textarea 
-                v-model="inputMessage" 
-                :placeholder="`快来和${currentCharacter?.name || '角色'}聊天吧，博士~`" 
-                class="input-area" 
-                @keydown="handleKeyDown"
-                :disabled="isLoading"
-            ></textarea>
+          </div>
         </div>
 
-        <!-- 右侧角色设定展示区域 -->
-        <div class="right">
-            <!-- 右侧加载动画 -->
-            <div class="right-loading-container" v-if="rightLoading">
-                <div class="right-loading-content">
-                    <Loading class="right-loading-icon" />
-                    <span class="right-loading-text">正在加载角色信息...</span>
-                </div>
-            </div>
-
-            <!-- 角色信息展示（结合后端返回的详细信息） -->
-            <div class="character-information" v-else-if="currentCharacter && characterDetail">
-                <!-- 角色基础信息（头像+名称） -->
-                <div class="character-info-header">
-                    <img :src="currentCharacter.avatar" alt="characterDetail.name" class="character-info-avatar">
-                    <h2 class="character-info-name">{{ characterDetail.name || currentCharacter.name }}</h2>
-                </div>
-
-                <!-- 角色核心信息 -->
-                <div class="character-info-body">
-                    <!-- 基础属性 -->
-                    <div class="info-group">
-                        <div class="info-item">
-                            <span class="info-label">角色ID：</span>
-                            <span class="info-value">{{ currentCharacter.characterId }}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">职业：</span>
-                            <span class="info-value">{{ characterDetail.profession || '暂无' }}</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="info-label">阵营：</span>
-                            <span class="info-value">{{ characterDetail.camp || '暂无' }}</span>
-                        </div>
-                    </div>
-
-                    <!-- 角色履历 -->
-                    <div class="info-group">
-                        <h3 class="group-title">角色履历</h3>
-                        <div class="info-item full-width">
-                            <span class="info-value">{{ characterDetail.experience || '暂无' }}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        
-            <!-- 无角色/无详情时的占位 -->
-            <div class="no-character" v-else>
-                <p>{{ currentCharacter ? '暂无角色详细信息' : '暂无选中的角色' }}</p>
-            </div>
+        <div class="left-btns">
+            <button class="test-load-btn" @click="testLoading">测试加载</button>
+            <button class="open-detail-btn" @click="openDialog">角色详情</button>
         </div>
+      </div>
+
+      <div v-else class="left-user-panel">
+        <div class="user-card">
+          <img :src="userInfo.avatar" class="user-avatar" alt="用户头像" />
+          <div class="user-name">{{ userInfo.nickname }}</div>
+          <div class="user-sign">{{ userInfo.signature }}</div>
+          <button class="edit-user-btn" @click="goToUserEdit">编辑资料</button>
+        </div>
+      </div>
     </div>
+
+    <div class="main">
+      <div class="main-header">
+        <span v-if="currentViewMode === 'characterChat'">
+          {{ currentCharacter?.name || '选择角色' }}
+        </span>
+        <span v-else-if="currentViewMode === 'characterDetail'">
+          {{ currentDetailCharacter?.name || '角色详情' }}
+        </span>
+        <span v-else-if="currentViewMode === 'moment'">朋友圈</span>
+      </div>
+
+      <div class="main-body" ref="messageContainer">
+        <div v-if="currentViewMode === 'characterChat'">
+          <div v-for="(msg, i) in messages" :key="i"
+            class="msg-item" :class="{ user: msg.sender === 'user', ai: msg.sender === 'ai' }">
+            <!-- 3. 【修改】userAvatar 改为 userInfo.avatar -->
+            <img :src="msg.sender === 'user' ? userInfo.avatar : currentCharacter?.avatar" class="msg-avatar" />
+            <div class="msg-bubble">{{ msg.content }}</div>
+          </div>
+
+          <div class="loading-ai" v-if="isLoading">
+            <!-- 4. 【修改】userAvatar 改为 userInfo.avatar -->
+            <img :src="currentCharacter?.avatar || userInfo.avatar" class="msg-avatar" />
+            <div class="loading-text"><Loading class="spin" /> 正在输入...</div>
+          </div>
+          <div class="empty-tip" v-if="!currentCharacter">请选择左侧角色开始聊天</div>
+        </div>
+
+        <div v-else-if="currentViewMode === 'characterDetail'" class="empty-tip">
+          请在左侧选择角色，右侧查看详情
+        </div>
+
+        <div v-else-if="currentViewMode === 'moment'" class="moment-container">
+          <div class="loading-moment" v-if="isMomentGenerating">
+            <Loading class="spin" /> 正在生成今日朋友圈...
+          </div>
+
+          <div class="moment-empty" v-else-if="!momentList.length">
+            暂无朋友圈，切换出去再回来试试～
+          </div>
+
+          <div class="moment-card" v-for="mom in momentList" :key="mom.id">
+            <div class="moment-header">
+              <img :src="mom.character.avatar" class="moment-avatar" />
+              <div class="moment-meta">
+                <div class="moment-char-name">{{ mom.character.name }}</div>
+                <div class="moment-time">{{ mom.createTime }}</div>
+              </div>
+            </div>
+            <div class="moment-content">{{ mom.content }}</div>
+            <div class="moment-actions">
+              <button class="like-btn" :class="{ liked: mom.isLiked }" @click="toggleLike(mom)">
+                ♥ {{ mom.like }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <textarea v-if="currentViewMode === 'characterChat'"
+        v-model="inputMessage"
+        class="input-box"
+        :placeholder="`和 ${currentCharacter?.name || '角色'} 聊天...`"
+        @keydown="handleKeyDown"
+        :disabled="isLoading || !currentCharacter"
+      />
+    </div>
+
+    <div class="right" v-if="currentViewMode === 'characterDetail'">
+      <div v-if="rightLoading" class="right-loading">
+        <Loading class="spin" /> 加载中...
+      </div>
+      <div v-else-if="currentDetailCharacter && characterDetail" class="char-info-card">
+        <img :src="currentDetailCharacter.avatar" class="right-avatar" />
+        <h3>{{ characterDetail.name }}</h3>
+        <div class="favor-bar">
+          <div class="label">好感度 {{ favor }}/200</div>
+          <div class="bar"><div class="bar-fill" :style="{ width: `${favor/2}%` }"></div></div>
+        </div>
+        <div class="brief" v-if="characterDetail.brief">{{ characterDetail.brief }}</div>
+      </div>
+      <div v-else class="right-empty">请选择角色</div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-/* 样式部分无修改，保持原有样式 */
+/* 全局布局 */
 .chat-home {
-    background-color: #ffffff;
-    width: 100vw;
-    height: 100vh;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: row;
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  background: #fff;
+  overflow: hidden;
 }
 
-/* 左侧角色列表 */
+/* 左侧区域 */
 .left {
-    flex: 0 0 120px;
-    min-width: 120px;
-    min-height: 100vh;
-    background-color: #f5f7fa;
-    padding: 16px 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
-    overflow-y: auto;
-    border-right: 1px solid #908f8f6a;
+  width: 260px;
+  background: #3e3e3f;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 12px;
 }
 
-/* 角色卡片样式优化 */
+/* 顶部视图切换按钮 */
+.view-tabs {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tab-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: none;
+  background: #e2e8f0;
+  color: #4a5568;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: #4299e1;
+  color: #fff;
+}
+
+.tab-icon {
+  font-size: 18px;
+}
+
+/* 左侧通用内容区 */
+.left-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom:8px;
+}
+
+/* 聊天模式角色卡片 */
 .character-card {
-    width: 100%;
-    height: 100px;
-    background-color: #d1d1d1;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-    box-sizing: border-box;
-    transition: all 0.25s ease; /* 过渡效果 */
+  background: #cac6c6;
+  margin-top: 5px;
+  border-radius: 100px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  min-height: 70px;
+  /* 防止内部元素溢出卡片 */
+  overflow: hidden;
 }
 
 .character-card.active {
-    background-color: #e8f4f8;
-    border: 1px solid #4299e1;
+  background: rgb(193, 199, 63);
+  border: 1px solid #4299e1;
 }
 
-.character-card:hover {
-    transform: scale(1.02);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* hover阴影增强 */
-    background-color: #fafafa; /* hover时轻微变色 */
+.char-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  /* 核心：禁止头像被挤压 */
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 
-/* 角色内容容器 */
-.character-card > div {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    height: 100%;
-    gap: 12px;
-    cursor: pointer;
+.char-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* 限制文字区域宽度，避免挤占头像 */
+  width: calc(100% - 54px);
+  overflow: hidden;
 }
 
-/* 头像样式 */
-.character-box-avatar {
-    width: 56px;
-    height: 56px;
-    background-size: cover;
-    background-position: center;
-    border-radius: 50%;
-    border: 2px solid #ffffff;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-    flex-shrink: 0;
+.char-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #2d3748;
+  /* 超长昵称自动截断 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* 角色名称样式 */
-.character-name {
-    font-size: 16px; 
-    font-weight: 500;
-    color: #2d3748; 
-    padding: 0;
-    text-align: left; 
-    white-space: nowrap; /* 防止文字换行 */
-    overflow: hidden; /* 超出部分隐藏 */
-    text-overflow: ellipsis; /* 超出显示省略号 */
-    flex: 1; 
+.char-lastMsg {
+  font-size: 12px;
+  color: #718096;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* 固定行高，防止换行挤压 */
+  line-height: 1.2;
 }
 
+/* 详情模式角色卡片 */
+.detail-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.detail-card.active {
+  border: 2px solid #4299e1;
+  background: #f0f7ff;
+}
+
+.detail-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-size: cover;
+  /* 同步防挤压 */
+  flex-shrink: 0;
+}
+
+.detail-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-name {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.detail-brief {
+  font-size: 12px;
+  color: #718096;
+}
+
+/* 功能按钮容器 */
+.left-btns{
+    margin-top:auto;
+    display:flex;
+    gap:8px;
+    width:100%;
+    padding:0 2px;
+}
+
+/* 功能按钮 */
+.test-load-btn,
+.open-detail-btn{
+    padding:8px;
+    border-radius:8px;
+    border:none;
+    cursor:pointer;
+    flex:1;
+    text-align:center;
+}
+
+.open-detail-btn {
+  background: #4299e1;
+  color: #fff;
+}
+
+/* 朋友圈模式：左侧用户面板 */
+.left-user-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.user-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #4299e1;
+}
+
+.user-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.user-sign {
+  font-size: 13px;
+  color: #718096;
+}
+
+.edit-user-btn {
+  margin-top: 10px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #4299e1;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+/* 中间主区域 */
 .main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    box-sizing: border-box;
-    overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e2e8f0;
 }
 
-.header {
-    width: 100%;
-    height: 80px; /* 【修改】增高头部高度以容纳好感度条 */
-    background-color: #f5f7fa;
-    /* 设置边框 */
-    border-bottom: 1px solid #908f8f6a;
-    border-left: 1px solid #908f8f6a;
-    display: flex;
-    align-items: center; /* 垂直居中 */
-    padding: 0 16px;
-    box-sizing: border-box;
+.main-header {
+  height: 70px;
+  padding: 0 20px;
+  background: #f5f7fa;
+  display: flex;
+  align-items: center;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-/* 【新增】头部内容容器 */
-.header-content {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+.main-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: #f9fafb;
 }
 
-.header p {
-    font-size: 20px;
-    font-weight: bold;
-    line-height: 1; /* 【修改】重置行高 */
-    margin: 0; /* 【修改】重置外边距 */
-    color: #2d3748;
+.empty-tip {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
 }
 
-/* 【新增】好感度条样式 */
-.favor-container {
-    width: 100%;
-    max-width: 400px; /* 限制好感度条最大宽度 */
+/* 聊天消息样式 */
+.msg-item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  align-items: flex-start;
 }
 
-.favor-label {
-    font-size: 14px;
-    color: #4a5568;
-    margin-bottom: 4px;
+.msg-item.user {
+  flex-direction: row-reverse;
 }
 
-.favor-bar-wrapper {
-    width: 100%;
-    height: 8px;
-    background-color: #e2e8f0;
-    border-radius: 4px;
-    overflow: hidden;
+.msg-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.msg-bubble {
+  max-width: 60%;
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+
+.msg-item.ai .msg-bubble {
+  background: #e8f4f8;
+  color: #2d3748;
+}
+
+.msg-item.user .msg-bubble {
+  background: #4299e1;
+  color: #fff;
+}
+
+.loading-ai {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #718096;
+}
+
+/* 聊天输入框 */
+.input-box {
+  height: 130px;
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  padding: 12px 16px;
+  font-size: 15px;
+  resize: none;
+  outline: none;
+  background: #f5f7fa;
+}
+
+.input-box:disabled {
+  background: #f0f2f5;
+  color: #9ca3af;
+}
+
+/* 右侧角色详情区域 */
+.right {
+  width: 320px;
+  background: #f8f9fa;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.right-loading {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  color: #718096;
+}
+
+.char-info-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+.right-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 12px;
 }
 
 .favor-bar {
-    height: 100%;
-    background-color: #48bb78; /* 绿色进度条，可根据需要修改 */
-    border-radius: 4px;
-    transition: width 0.3s ease; /* 平滑过渡效果 */
+  margin: 12px 0;
 }
 
-.message-container {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-    box-sizing: border-box;
-    background-color: #f5f7fa;
-    min-height: 0; /* 允许flex子元素缩小到内容高度以下 */
+.label {
+  font-size: 14px;
+  color: #718096;
+  margin-bottom: 4px;
 }
 
-.input-area {
-    background-color: #f5f7fa;
-    display: block;
-    height: 140px;
-    width: 100%;
-    box-sizing: border-box;
-    border: none;
-    border-top: 1px solid #908f8f6a;
-    padding: 12px 16px;
-    font-size: 16px;
-    resize: none;
-    outline: none;
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+.bar {
+  width: 200px;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
-/* 头像样式 */
-.avatar {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%; /* 圆形头像 */
-    overflow: hidden; /* 防止图片超出圆形 */
-    flex-shrink: 0; 
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.bar-fill {
+  height: 100%;
+  background: #48bb78;
+  transition: width .3s;
 }
 
-.avatar img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+.brief {
+  font-size: 14px;
+  color: #4a5568;
+  margin-top: 12px;
+  text-align: left;
+  line-height: 1.6;
 }
 
-/* 信息界面布局 */
-.message {
-    display: flex; 
-    align-items: flex-start; 
-    margin-bottom: 16px; 
-    padding: 0 8px; 
+/* 朋友圈样式 */
+.moment-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-/* 用户信息 */
-.message.user-message {
-    flex-direction: row-reverse; 
-    justify-content: flex-start; 
+.loading-moment {
+  text-align: center;
+  padding: 40px;
+  color: #718096;
 }
 
-.message.user-message .avatar {
-    margin-left: 12px;
+.moment-empty {
+  text-align: center;
+  padding: 40px;
+  color: #9ca3af;
 }
 
-.message.user-message .message-content {
-    color: #ffffff;
-    background-color: #4299e1;
-    padding: 8px 12px;
-    border-radius: 8px;
-    max-width: 70%;
+.moment-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 2px 8px #00000008;
 }
 
-.message.ai-message {
-    flex-direction: row; 
-    justify-content: flex-start;
+.moment-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.message.ai-message .avatar {
-    margin-right: 12px;
+.moment-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
-.message.ai-message .message-content {
-    color: #2d3748;
-    background-color: #e8f4f8;
-    padding: 8px 12px;
-    border-radius: 8px;
-    max-width: 70%;
+.moment-meta {
+  flex: 1;
 }
 
-/* 加载状态样式 */
-.ai-loading {
-    display: flex;
-    align-items: center;
-    margin-bottom: 16px;
-    padding: 0 8px;
+.moment-char-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
 }
 
-.loading-container {
-    background-color: #e8f4f8;
-    padding: 12px 16px;
-    border-radius: 8px;
-    margin-left: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 120px; /* 确保不会被压缩 */
+.moment-time {
+  font-size: 12px;
+  color: #9ca3af;
 }
 
-/* 通用旋转动画类 */
+.moment-content {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #4a5568;
+  margin-bottom: 12px;
+}
+
+.moment-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.like-btn {
+  border: none;
+  background: transparent;
+  color: #718096;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.like-btn.liked {
+  color: #e53e3e;
+}
+
+/* 旋转动画 */
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* 通用加载动画类 */
-.loading-spinner {
-    display: inline-block;
-    color: #4299e1;
-    animation: spin 1s linear infinite;
-}
-
-.loading-spinner.small {
-    width: 16px;
-    height: 16px;
-}
-
-.loading-spinner.medium {
-    width: 24px;
-    height: 24px;
-}
-
-.loading-spinner.large {
-    width: 32px;
-    height: 32px;
-}
-
-.loading-spinner.slow {
-    animation-duration: 2s;
-}
-
-.loading-spinner.fast {
-    animation-duration: 0.8s;
-}
-
-/* 兼容现有代码的loading-icon样式 */
-.loading-icon {
-    width: 18px;
-    height: 18px;
-    color: #4299e1;
-    animation: rotate 1.5s linear infinite; /* 保持向后兼容 */
-}
-
-/* 加载文字 */
-.loading-text {
-    font-size: 14px;
-    color: #4a5568;
-    line-height: 1;
-}
-
-/* 保持向后兼容的旋转动画 */
-@keyframes rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-/* 响应式设计支持 */
-@media (max-width: 1200px) {
-    /* 中等屏幕：适当调整右侧面板宽度 */
-    .right {
-        flex: 0 0 280px;
-        min-width: 280px;
-    }
-}
-
-@media (max-width: 992px) {
-    /* 小屏幕：隐藏右侧面板 */
-    .right {
-        display: none;
-    }
-    
-    /* 增加主内容区域占比 */
-    .left {
-        flex: 0 0 100px;
-        min-width: 100px;
-    }
-}
-
-@media (max-width: 768px) {
-    /* 平板设备：调整布局为垂直堆叠 */
-    .chat-home {
-        flex-direction: column;
-    }
-    
-    .left {
-        flex: 0 0 auto;
-        min-width: auto;
-        height: auto;
-        min-height: auto;
-        max-height: 120px;
-        flex-direction: row;
-        overflow-x: auto;
-        overflow-y: hidden;
-    }
-    
-    .character-card {
-        min-width: 80px;
-        width: 80px;
-    }
-}
-
-@media (max-width: 576px) {
-    /* 移动设备：进一步简化布局 */
-    .left {
-        padding: 12px 4px;
-        gap: 8px;
-    }
-    
-    .character-card {
-        min-width: 70px;
-        width: 70px;
-        height: 90px;
-    }
-    
-    .message-content {
-        max-width: 85% !important;
-    }
-    
-    .input-area {
-        height: 120px;
-        padding: 10px 12px;
-    }
-
-    /* 移动端调整好感度条宽度 */
-    .favor-container {
-        max-width: 100%;
-    }
-}
-
-/* 禁用状态的输入框样式 */
-.input-area:disabled {
-    background-color: #f0f2f5;
-    cursor: not-allowed;
-    color: #9ca3af;
-}
-
-/* 右侧区域样式 */
-.right {
-    flex: 0 0 320px;
-    min-width: 320px;
-    min-height: 100vh;
-    background-color: #f8f9fa;
-    padding: 20px;
-    box-sizing: border-box;
-    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.05);
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-}
-
-/* 右侧加载动画样式 */
-.right-loading-container {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.right-loading-content {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background-color: #e8f4f8;
-    padding: 16px 24px;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.right-loading-icon {
-    width: 24px;
-    height: 24px;
-    color: #4299e1;
-    animation: rotate 1.5s linear infinite;
-}
-
-.right-loading-text {
-    font-size: 16px;
-    color: #4a5568;
-    font-weight: 500;
-}
-
-/* 角色信息展示样式 */
-.character-information {
-    width: 100%;
-    height: 100%;
-    background-color: #ffffff;
-    border-radius: 16px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    padding: 24px;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-}
-
-.character-info-header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    border-bottom: 1px solid #e2e8f0;
-    padding-bottom: 20px;
-}
-
-.character-info-avatar {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 4px solid #e8f4f8;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.character-info-name {
-    font-size: 24px;
-    font-weight: 600;
-    color: #2d3748;
-    margin: 0;
-}
-
-/* 信息分组样式 */
-.character-info-body {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.info-group {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.group-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #2d3748;
-    margin: 0;
-    padding-bottom: 4px;
-    border-bottom: 2px solid #e8f4f8;
-}
-
-.info-item {
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-}
-
-.info-item.full-width {
-    flex-direction: column;
-    gap: 4px;
-}
-
-.info-label {
-    font-size: 14px;
-    color: #718096;
-    font-weight: 500;
-    flex-shrink: 0;
-    min-width: 60px;
-}
-
-.info-value {
-    font-size: 16px;
-    color: #2d3748;
-    line-height: 1.5;
-    word-break: break-all;
-    flex: 1;
-}
-
-/* 档案项样式 */
-.file-item {
-    display: flex;
-    gap: 8px;
-    padding: 8px 0;
-    border-bottom: 1px solid #f0f2f5;
-}
-
-.file-label {
-    font-size: 14px;
-    color: #718096;
-    font-weight: 500;
-    flex-shrink: 0;
-    min-width: 60px;
-}
-
-.file-content {
-    font-size: 16px;
-    color: #2d3748;
-    line-height: 1.5;
-    word-break: break-all;
-    flex: 1;
-}
-
-/* 空提示样式 */
-.empty-tip {
-    font-size: 14px;
-    color: #9ca3af;
-    text-align: center;
-    padding: 8px 0;
-}
-
-/* 无角色占位样式 */
-.no-character {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #718096;
-    font-size: 18px;
-}
-
-/* 角色信息弹窗样式 */
-.el-dialog__header {
-    background-color: #f5f7fa;
-    padding: 16px 24px;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.el-dialog__title {
-    font-size: 20px;
-    font-weight: 600;
-    color: #2d3748;
-}
-
-.el-dialog__body {
-    padding: 24px;
-    max-height: 500px;
-    overflow-y: auto;
-    background-color: #ffffff;
-}
-
-.el-dialog__body img {
-    display: block;
-    width: 180px;
-    height: 180px;
-    object-fit: cover;
-    border-radius: 8px;
-    margin: 0 auto 20px;
-    border: 3px solid #e8f4f8;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.el-dialog__body p {
-    margin-bottom: 12px;
-    font-size: 16px;
-    line-height: 1.6;
-    color: #2d3748;
-}
-
-.el-dialog__body strong {
-    color: #4a5568;
-    font-weight: 600;
-    min-width: 80px;
-    display: inline-block;
-}
-
-.el-dialog__footer {
-    padding: 16px 24px;
-    background-color: #f5f7fa;
-    border-top: 1px solid #e2e8f0;
-    text-align: right;
-}
-
-/* 弹窗按钮样式 */
-.el-button--primary {
-    background-color: #4299e1;
-    border-color: #4299e1;
-}
-
-.el-button--primary:hover {
-    background-color: #3182ce;
-    border-color: #3182ce;
-}
-
-/* 弹窗遮罩层 */
-.el-dialog__wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* 弹窗动画 */
-.el-dialog__wrapper .el-dialog {
-    animation: dialogFadeIn 0.3s ease;
-}
-
-@keyframes dialogFadeIn {
-    from {
-        opacity: 0;
-        transform: translate3d(0, -20px, 0);
-    }
-    to {
-        opacity: 1;
-        transform: translate3d(0, 0, 0);
-    }
-}
-
-/* 角色详细信息按钮样式 */
-.left button:nth-of-type(2) {
-    margin-top: 16px;
-    padding: 10px 16px;
-    background-color: #4299e1;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s ease;
-}
-
-.left button:nth-of-type(2):hover {
-    background-color: #3182ce;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
-}
-
-.left button:nth-of-type(2):active {
-    transform: translateY(0);
+.spin {
+  animation: spin 1.5s linear infinite;
 }
 </style>

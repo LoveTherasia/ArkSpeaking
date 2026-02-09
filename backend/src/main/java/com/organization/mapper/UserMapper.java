@@ -1,18 +1,15 @@
 package com.organization.mapper;
 
 import com.organization.pojo.User;
-import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface UserMapper {
-    //根据用户名查询用户
-    @Select("select * from arkspeaking.user where username = #{username}")
-    User findByUserName(String username);
+    @Select("SELECT id,nickname,avatar,signature FROM `user` WHERE id = 1")
+    User getCurrentUser();
 
-    //添加
-    @Insert("insert into arkspeaking.user(username,password,create_time,update_time)" +
-            " values(#{username},#{password},now(),now())")
-    void add(String username, String password);
+    @Update("UPDATE `user` SET nickname = #{nickname},avatar = #{avatar},signature = #{signature} WHERE id = 1")
+    int updateUserInfo(User user);
 }

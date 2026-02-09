@@ -1,65 +1,74 @@
 package com.organization.controller;
 
+import com.organization.pojo.User;
+import com.organization.service.UserService;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.tomcat.util.http.fileupload.MultipartStream;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import com.organization.pojo.Result;
-import com.organization.pojo.User;
-import com.organization.service.UserService;
-import com.organization.utils.JwtUtil;
-import com.organization.utils.Md5Util;
-
-import jakarta.validation.constraints.Pattern;
-
+@Slf4j
 @RestController
-@RequestMapping("/user")
-@Validated
 public class UserController {
-
     @Autowired
     private UserService userService;
 
-    //注册接口
-    @PostMapping("/register")
-    public Result<?> Register(@Pattern(regexp = "^\\S{3,16}$")String username,@Pattern(regexp = "^\\S{5,16}$") String password) {
-        //查询用户名是否被占用
-        User u = userService.findByUserName(username);
-        if (u != null) {
-            //用户名已经被占用了
-            return Result.error("用户名已被占用");
-        }
-        else
-        {
-            //用户名没有被占用
-            userService.register(username,password);
-            return Result.success();
+    //上传头像接口
+    @PostMapping("/user/upload/avatar")
+    public ResponseEntity<Map<String,Object>> uploadAvatar(@RequestParam("avatar") MultipartFile file){
+        Map<String,Object> result = new HashMap<>();
+
+        try{
+            //调用service层存储头像
+            String avatarUrl = userService.uploadAndSaveAvatar(file);
+            result.put("success",true);
+            result.put("avatarUrl",avatarUrl);
+            return ResponseEntity.ok(result);
+        }catch(IllegalArgumentException e){
+            //参数错误
+            result.put("success",false);
+            result.put("message",e.getMessage());
+            return ResponseEntity.badRequest().body(result);
+        }catch(IOException e){
+            //文件存储失败
+            result.put("success",false);
+            result.put("message",e.getMessage());
+            log.error("头像上传异常",e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
         }
     }
 
-    @PostMapping("/login")
-    public Result<?> Login(@Pattern(regexp = "^\\S{3,16}$")String username,@Pattern(regexp = "^\\S{5,16}$")String password)
-    {
-        User loginuser =  userService.findByUserName(username);
-        if(loginuser==null){
-            return Result.error("用户名不存在！");
-        }
+    @PostMapping("/user/update")
+    public ResponseEntity<Map<String,Object>> updateUserInfo(@RequestBody User user){
+        Map<String,Object> result = new HashMap<>();
 
-        else if(!Md5Util.code(password).equals(loginuser.getPassword())){
-            return Result.error("密码错误!");
+        try{
+            //调用Service存储用户信息到数据库
+            boolean isSuccess = userService.saveUserInfo(user);
+            result.put("success",isSuccess);
+            result.put("message",isSuccess ? "用户信息存储成功" : "用户信息存储失败");
+            return ResponseEntity.ok(result);
+        }catch(Exception e){
+            result.put("success",false);
+            result.put("message",e.getMessage());
+            log.error("保存用户信息异常",e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
         }
+    }
 
-        else {
-            Map<String,Object> map = new HashMap<>();
-            map.put("id",loginuser.getId());
-            map.put("username",username);
-            String token = JwtUtil.onCreate(map);
-            return Result.success(token);
-        }
+    @PostMapping("user/info")
+    public ResponseEntity<User> getCurrentUserInfo(){
+        User user = userService.getCurrentInfo();
+        return ResponseEntity.ok(user);
     }
 }

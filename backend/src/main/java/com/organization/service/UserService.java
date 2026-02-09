@@ -1,10 +1,15 @@
 package com.organization.service;
 
+
 import com.organization.pojo.User;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 public interface UserService {
-    //根据用户名查询用户
-    User findByUserName(String username);
-    //注册功能
-    void register(String username, String password);
+    public String uploadAndSaveAvatar(MultipartFile file) throws IOException;
+
+    public boolean saveUserInfo(User user);
+
+    public User getCurrentInfo();
 }

@@ -1,4 +1,5 @@
 import { createRouter,createWebHashHistory } from 'vue-router';
+import UserEdit from '@/views/UserEdit.vue'
 
 const router = createRouter({
     history:createWebHashHistory(),
@@ -15,6 +16,11 @@ const router = createRouter({
                     return {path:'/'};
                 }
             }
+        },
+        {
+            path:'/user/edit',
+            name:'UserEdit',
+            component: UserEdit
         }
     ]
 });

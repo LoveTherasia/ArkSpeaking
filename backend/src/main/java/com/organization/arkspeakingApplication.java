@@ -9,6 +9,7 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -17,6 +18,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 核心功能：自动检测可用端口启动应用，避免固定端口被占用导致启动失败
  */
 @SpringBootApplication
+@MapperScan("com.organization.mapper")
 public class arkspeakingApplication {
     // 程序入口方法
     public static void main(String[] args) throws IOException {
