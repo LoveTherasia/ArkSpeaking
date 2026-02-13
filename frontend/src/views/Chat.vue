@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue';
+import { ref, onMounted, watch, nextTick, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { loadCharacter } from '@/utils/loadCharacter';
 import axios from 'axios';
@@ -15,15 +15,27 @@ axios.defaults.baseURL = 'http://localhost:8080';
 
 const route = useRoute();
 const router = useRouter();
+//角色列表
 const characterList = ref([]);
+//当前选定的角色
 const currentCharacter = ref(null);
+//聊天列表
 const messages = ref([]);
+//存储的所有聊天信息
+const allChatRecords = ref({});
+//用户输入信息
 const inputMessage = ref("");
+//输入框内容
 const messageContainer = ref(null);
+//记录上一条信息
 const lastMessages = ref({});
+//是否在加载朋友圈
 const isLoading = ref(false);
+//是否在获取AI回复
 const rightLoading = ref(false);
+//角色详细信息
 const characterDetail = ref(null);
+//角色好感度
 const favor = ref(0);
 
 let abortController = null;
@@ -43,6 +55,11 @@ const userInfo = ref({
   avatar: "http://localhost:5173/src/assets/user.jpg", // 保留默认值（降级）
   signature: "与角色们的日常"
 });
+
+//live2d相关  
+// let live2dModel = null;
+// const live2dLoaded = ref(false);
+// const currentLive2dModelId = ref('haru01');
 
 // 工具方法
 //截断文本
@@ -160,6 +177,37 @@ const goToUserEdit = () => {
   });
 };
 
+//批量加载所有角色的聊天记录
+const loadAllChatRecords = async() => {
+  if(!characterList.value.length) return ;
+
+  //遍历所有角色加载聊天记录
+  for(const char of characterList.value){
+    try{
+      const res = await axios.get('/chat/read',{
+        params:{characterId: char.characterId}
+      });
+      const msgs = Array.isArray(res.data) ? res.data : [];
+
+      //转换格式并存储
+      allChatRecords.value[char.characterId] = msgs.map(m => ({
+        sender: m.sendId === char.characterId ? 'ai' : 'user',
+        content: m.content,
+        time: m.createTime || new Date().toLocaleDateString()
+      }));
+
+      //更新最后一条消息
+      if(msgs.length){
+        lastMessages.value[char.characterId] = msgs.at(-1).content;
+      }else {
+        lastMessages.value[char.characterId] = "";
+      }
+    }catch(e){
+      console.error(`加载角色${char.name}的聊天记录失败`,e);
+      allChatRecords.value[char.characterId] = [];
+    }
+  }
+};
 
 const testLoading = () => { isLoading.value = !isLoading.value; };
 const createChatMessage = (senderId, receiverId, content) => ({ senderId, receiverId, content });
@@ -170,31 +218,11 @@ const saveChatMessage = async (message) => {
 };
 
 const readChatMessage = async (targetCharacterId) => {
-  if (!targetCharacterId) return;
-  if (abortController) abortController.abort();
-  abortController = new AbortController();
+  if(!targetCharacterId) return ;
 
-  try {
-    const res = await axios.get('/chat/read', {
-      params: { characterId: targetCharacterId },
-      signal: abortController.signal
-    });
-    if (targetCharacterId !== currentLoadingCharacterId) return;
-
-    const msgs = Array.isArray(res.data) ? res.data : [];
-    messages.value = msgs.map(m => ({
-      sender: m.sendId === targetCharacterId ? 'ai' : 'user',
-      content: m.content
-    }));
-    if (msgs.length) {
-      lastMessages.value[targetCharacterId] = msgs.at(-1).content;
-    } else {
-      lastMessages.value[targetCharacterId] = "";
-    }
-    scrollToBottom();
-  } catch (e) {
-    if (e.name !== 'AbortError') console.error("读聊天记录失败", e);
-  }
+  //从缓存中获取
+  messages.value = allChatRecords.value[targetCharacterId] || [];
+  scrollToBottom();
 };
 
 const fetchData = async (targetCharacterId, characterName) => {
@@ -231,9 +259,74 @@ const initViewModeFromRoute = () => {
   currentViewMode.value = viewMode;
 }
 
+// 初始化live2d模型
+// const initLive2dModel = async () => {
+//   if(live2dModel || !currentCharacter.value) return ;
+
+//   try{
+//     //动态加载Live2D库
+//     if(!window.L2Dwidget){
+//       await import('live2d-widget');
+//     }
+
+//     //销毁旧模型
+//     if(live2dModel){
+//       window.L2Dwidget.destory();
+//     }
+
+//     // 初始化live2d
+//     live2dModel = window.L2Dwidget.init({
+//       pluginRootPath: 'live2d-widget/',
+//       pluginJsPath: 'lib/',
+//       pluginModelPath: 'assets/live2d/',
+//       tagMode: false,
+//       debug: false,
+//       model:{
+//         jsonPath: `./live2d-widget/assets/${currentLive2dModelId.value}/model.json`,
+//       },
+//       display:{
+//         superSample: 2,
+//         width: 280,
+//         height: 400,
+//         position: 'inline',
+//         hOffset: 0,
+//         vOffset: -20,
+//       },
+//       mobile:{
+//         show:true,
+//         scale:0.5
+//       },
+//       react:{
+//         opacityDefault: 1,
+//         opacityOnHover: 0.9,
+//       }
+//     });
+
+//     nextTick(() => {
+//       const live2dContainer = document.getElementById('live2d-container');
+//       if(live2dContainer && document.getElementById("live2dcanvas")){
+//         live2dContainer.appendChild(document.getElementById("live2dcanvas"));
+//         live2dLoaded.value = true;
+//       }
+//     });
+//   }catch(err){
+//     console.error("Live2d初始化失败",err);
+//     live2dLoaded.value = false;
+//   }
+// };
+
+//切换live2d模型
+// const switchLive2dModel = (modelId) => {
+//   currentLive2dModelId.value = modelId;
+//   live2dModel = null;
+//   initLive2dModel();
+// }
+
 onMounted(async () => {
   try {
     characterList.value = await loadCharacter();
+    await loadAllChatRecords();
+
     //初始化角色
     await initCurrentCharacter();
     // 加载本地存储的朋友圈
@@ -257,6 +350,13 @@ onMounted(async () => {
 
   } catch (e) { console.error("角色初始化失败", e); }
 });
+
+// onUnmounted(() => {
+//   if(live2dModel && window.L2Dwidget){
+//     window.L2Dwidget.destory();
+//     live2dModel = null;
+//   }
+// })
 
 //监听视图模式变化,同步更新到query
 watch(currentViewMode, (newMode) => {
@@ -296,8 +396,14 @@ const initCurrentCharacter = async () => {
     if (!char) { router.push('/'); return; }
     currentCharacter.value = char;
     if (currentViewMode.value === 'characterDetail') currentDetailCharacter.value = char;
+    
     await readChatMessage(cid);
     await fetchData(cid, char.name);
+    //初始化当前角色的live2d
+    if(currentViewMode.value === 'characterChat'){
+      initLive2dModel();
+    }
+
   } catch (e) { console.error("initCurrentCharacter err", e); }
 };
 
@@ -317,6 +423,12 @@ watch(
       if (currentViewMode.value === 'characterDetail') currentDetailCharacter.value = char;
       await readChatMessage(newId);
       await fetchData(newId, char.name);
+
+      //切换角色的时候更新live2d
+      // if(currentViewMode === 'characterChat'){
+      //   initLive2dModel();
+      // }
+
     } catch (e) {
       if (e.name !== 'AbortError') console.error("切换角色失败", e);
     } finally {
@@ -326,10 +438,12 @@ watch(
   { immediate: true }
 );
 
+//用户发送信息功能
 const sendMessage = () => {
   const txt = inputMessage.value.trim();
   if (!txt) { alert("请输入内容"); return; }
   messages.value.push({ sender: 'user', content: txt, time: new Date().toLocaleTimeString() });
+  allChatRecords.value[currentCharacter.value.characterId] = txt;
   if (currentCharacter.value) lastMessages.value[currentCharacter.value.characterId] = txt;
   
   saveChatMessage({
@@ -342,6 +456,7 @@ const sendMessage = () => {
   simulateAIResponse();
 };
 
+//AI回复功能
 const simulateAIResponse = () => {
   if (!currentCharacter.value) return;
   isLoading.value = true;
@@ -535,21 +650,63 @@ const closeDialog = () => dialogVisible.value = false;
       />
     </div>
 
-    <div class="right" v-if="currentViewMode === 'characterDetail'">
-      <div v-if="rightLoading" class="right-loading">
-        <Loading class="spin" /> 加载中...
-      </div>
-      <div v-else-if="currentDetailCharacter && characterDetail" class="char-info-card">
-        <img :src="currentDetailCharacter.avatar" class="right-avatar" />
-        <h3>{{ characterDetail.name }}</h3>
-        <div class="favor-bar">
-          <div class="label">好感度 {{ favor }}/200</div>
-          <div class="bar"><div class="bar-fill" :style="{ width: `${favor/2}%` }"></div></div>
+    <!-- 9. 重构：右侧区域根据视图模式动态切换 -->
+    <div class="right" v-if="currentViewMode === 'characterChat' || currentViewMode === 'characterDetail'">
+      <!-- 聊天视图：显示Live2D -->
+      <!-- <div v-if="currentViewMode === 'characterChat'" class="live2d-container">
+        <div id="live2d-container" class="live2d-wrapper">
+          <div v-if="!live2dLoaded" class="live2d-loading">
+            <Loading class="spin" /> 加载Live2D模型中...
+          </div>
+        </div> -->
+        <!-- Live2D模型切换按钮 -->
+        <!-- <div class="live2d-controls">
+          <button class="model-btn" @click="switchLive2dModel('haru01')" :class="{ active: currentLive2dModelId === 'haru01' }">
+            模型1
+          </button>
+          <button class="model-btn" @click="switchLive2dModel('haru02')" :class="{ active: currentLive2dModelId === 'haru02' }">
+            模型2
+          </button>
+          <button class="model-btn" @click="switchLive2dModel('shizuku01')" :class="{ active: currentLive2dModelId === 'shizuku01' }">
+            模型3
+          </button>
         </div>
-        <div class="brief" v-if="characterDetail.brief">{{ characterDetail.brief }}</div>
+      </div> -->
+
+      <!-- 角色详情视图：显示原详情 -->
+      <div v-if="characterDetail">
+        <div v-if="rightLoading" class="right-loading">
+          <Loading class="spin" /> 加载中...
+        </div>
+        <div v-else-if="currentDetailCharacter && characterDetail" class="char-info-card">
+          <div class="char-detail-header chat-style">
+            <div class="avatar-block">
+              <img :src="currentDetailCharacter.avatar" class="right-avatar big" />
+            </div>
+            <div class="char-name-block">
+              <h3 class="char-name chat-style">{{ characterDetail.name }}</h3>
+              <span class="char-title chat-style" v-if="characterDetail.title">{{ characterDetail.title }}</span>
+            </div>
+          </div>
+          <div class="favor-bar beautify chat-style">
+            <div class="label">好感度 <span class="favor-num">{{ favor }}</span>/200</div>
+            <div class="bar beautify"><div class="bar-fill beautify" :style="{ width: `${favor/2}%` }"></div></div>
+          </div>
+          <div class="char-info-section chat-style">
+            <div class="brief chat-style" v-if="characterDetail.brief">{{ characterDetail.brief }}</div>
+            <div class="char-meta chat-style">
+              <div v-if="characterDetail.gender"><span class="meta-label">性别：</span>{{ characterDetail.gender }}</div>
+              <div v-if="characterDetail.age"><span class="meta-label">年龄：</span>{{ characterDetail.age }}</div>
+              <div v-if="characterDetail.birthday"><span class="meta-label">生日：</span>{{ characterDetail.birthday }}</div>
+              <div v-if="characterDetail.identity"><span class="meta-label">身份：</span>{{ characterDetail.identity }}</div>
+              <div v-if="characterDetail.origin"><span class="meta-label">出身：</span>{{ characterDetail.origin }}</div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="right-empty">请选择角色</div>
       </div>
-      <div v-else class="right-empty">请选择角色</div>
     </div>
+
   </div>
 </template>
 
@@ -774,7 +931,7 @@ const closeDialog = () => dialogVisible.value = false;
 .user-name {
   font-size: 18px;
   font-weight: 600;
-  color: #2d3748;
+  color: #7698d3;
 }
 
 .user-sign {
@@ -844,7 +1001,7 @@ const closeDialog = () => dialogVisible.value = false;
   border-radius: 50%;
   object-fit: cover;
 }
-
+  
 .msg-bubble {
   max-width: 60%;
   padding: 10px 14px;
@@ -885,7 +1042,7 @@ const closeDialog = () => dialogVisible.value = false;
   color: #9ca3af;
 }
 
-/* 右侧角色详情区域 */
+/* 右侧区域 - 统一样式 */
 .right {
   width: 320px;
   background: #f8f9fa;
@@ -895,6 +1052,58 @@ const closeDialog = () => dialogVisible.value = false;
   align-items: center;
 }
 
+/* 10. 新增：Live2D容器样式 */
+.live2d-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.live2d-wrapper {
+  width: 280px;
+  height: 400px;
+  position: relative;
+  background: #f0f7ff;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.live2d-loading {
+  color: #718096;
+  font-size: 14px;
+}
+
+.live2d-controls {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 0 10px;
+}
+
+.model-btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  text-align: center;
+}
+
+.model-btn.active {
+  background: #4299e1;
+  color: #fff;
+  border-color: #4299e1;
+}
+
+/* 角色详情区域样式 */
 .right-loading {
   height: 100%;
   display: flex;
@@ -904,9 +1113,120 @@ const closeDialog = () => dialogVisible.value = false;
 
 .char-info-card {
   background: #fff;
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: 18px;
+  padding: 28px 18px 22px 18px;
   text-align: center;
+  box-shadow: 0 2px 16px 0 rgba(180,160,220,0.10), 0 1.5px 8px 0 rgba(180,160,220,0.08);
+  position: relative;
+  overflow: visible;
+  min-width: 280px;
+  max-width: 340px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.char-detail-header.chat-style {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.avatar-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.right-avatar.big {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #e9d8fd;
+  background: #fff;
+  box-shadow: 0 2px 12px #b89de622;
+}
+.char-name-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.char-name.chat-style {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #7c3aed;
+  margin-bottom: 2px;
+  letter-spacing: 1px;
+}
+.char-title.chat-style {
+  font-size: 0.95rem;
+  color: #b89de6;
+  background: #f3e8ff;
+  border-radius: 8px;
+  padding: 2px 10px;
+  margin-left: 2px;
+}
+.favor-bar.beautify.chat-style {
+  margin: 10px 0 6px 0;
+}
+.favor-bar.beautify .label {
+  font-size: 14px;
+  color: #a78bfa;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.favor-bar.beautify .favor-num {
+  color: #f472b6;
+  font-weight: bold;
+  font-size: 1.1em;
+  margin: 0 2px;
+}
+.bar.beautify {
+  width: 140px;
+  height: 8px;
+  background: linear-gradient(90deg, #e0e7ff 0%, #f3e8ff 100%);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0 auto;
+  box-shadow: 0 1px 4px #b89de622;
+}
+.bar-fill.beautify {
+  height: 100%;
+  background: linear-gradient(90deg, #a78bfa 0%, #f472b6 100%);
+  transition: width .5s cubic-bezier(.4,1.4,.6,1);
+  border-radius: 6px 0 0 6px;
+}
+.char-info-section.chat-style {
+  margin-top: 10px;
+  text-align: left;
+  width: 100%;
+}
+.brief.chat-style {
+  font-size: 14px;
+  color: #7c3aed;
+  margin-bottom: 8px;
+  text-align: left;
+  line-height: 1.7;
+  background: #f3e8ff55;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.char-meta.chat-style {
+  margin-top: 4px;
+  color: #6d28d9;
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.meta-label {
+  color: #a78bfa;
+  font-weight: 500;
+  margin-right: 2px;
 }
 
 .right-avatar {
@@ -947,6 +1267,14 @@ const closeDialog = () => dialogVisible.value = false;
   margin-top: 12px;
   text-align: left;
   line-height: 1.6;
+}
+
+.right-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
 }
 
 /* 朋友圈样式 */

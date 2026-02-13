@@ -19,13 +19,13 @@ public class MomentServiceImpl implements MomentService {
 
     // 初始化模板
     static {
-        MOMENT_TEMPLATES.add("%s：今天的天气真好，适合出门走走～");
-        MOMENT_TEMPLATES.add("%s：刚完成了一个小目标，开心！✨");
-        MOMENT_TEMPLATES.add("%s：偶尔摆烂也是一种生活态度😜");
-        MOMENT_TEMPLATES.add("%s：最近在研究%s，收获满满！");
-        MOMENT_TEMPLATES.add("%s：有没有小伙伴一起打卡%s？");
-        MOMENT_TEMPLATES.add("%s：人生就像一场旅行，重要的不是目的地，而是沿途的风景～");
-        MOMENT_TEMPLATES.add("%s：今日份小确幸：%s");
+        MOMENT_TEMPLATES.add("今天的天气真好，适合出门走走～");
+        MOMENT_TEMPLATES.add("刚完成了一个小目标，开心！✨");
+        MOMENT_TEMPLATES.add("偶尔摆烂也是一种生活态度😜");
+        MOMENT_TEMPLATES.add("最近在研究%s，收获满满！");
+        MOMENT_TEMPLATES.add("有没有小伙伴一起打卡%s？");
+        MOMENT_TEMPLATES.add("人生就像一场旅行，重要的不是目的地，而是沿途的风景～");
+        MOMENT_TEMPLATES.add("今日份小确幸：%s");
     }
 
     @Override
@@ -43,7 +43,7 @@ public class MomentServiceImpl implements MomentService {
 
         String content;
         //根据模板参数数量填充
-        if(template.contains("%s") && template.indexOf("%s") != template.lastIndexOf("%s")){
+        if(template.contains("%s")){
             content = String.format(template,characterName,characterBrief);
         }else{
             content = String.format(template,characterName);
