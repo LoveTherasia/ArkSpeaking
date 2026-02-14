@@ -4,11 +4,7 @@ import { loadCharacter } from '@/utils/loadCharacter';
 import router from '@/router.js';
 import * as Icons from '@element-plus/icons-vue';
 
-// 核心修复：在script中定义视频URL（避免模板中使用import.meta.url）
-// 根据你的视频格式选择（MP4/WebM），取消对应注释即可
 const loadingVideoUrl = new URL('@/assets/loading.webm', import.meta.url).href;
-// 如果是webm格式，取消下面注释并注释上面一行：
-// const loadingVideoUrl = new URL('@/assets/loading/loading.webm', import.meta.url).href;
 
 const characterList = ref([]);
 const transitionStage = ref('idle');
@@ -31,16 +27,15 @@ const toggleTheme = () => {
 const goToFunction = (funcType) => {
   console.log(`跳转到功能：${funcType}`);
 
-  // 修复：增加空值保护，避免无角色ID导致跳转失败
+  // 角色ID
   const defaultCharId = characterList.value.length > 0 
     ? characterList.value[0].characterId 
-    : 'default'; // 给默认值，避免参数为空
+    : 'default'; 
 
   transitionStage.value = 'shrinking';
   setTimeout(() => {
     transitionStage.value = 'loading';
     loadingText.value = '正在加载...';
-    // 移除：不再需要图片帧相关逻辑
     setTimeout(async () => {
       transitionStage.value = 'expanding';
       setTimeout(() => {
@@ -69,7 +64,6 @@ const goToFunction = (funcType) => {
           case 'paperAnalysis':
             router.push({
               name: 'PaperAnalysis',
-              params: { characterId: defaultCharId }
             });
             break;
         }
@@ -79,10 +73,7 @@ const goToFunction = (funcType) => {
   }, 600);
 };
 
-const initBackgroundDecorations = () => {
-  
-};
-
+// 卡片功能
 const functionList = ref([
   {
     id: 'characterChat',
@@ -137,7 +128,7 @@ const renderList = computed(() => {
   return [arr[arr.length - 1], ...arr, arr[0]];
 });
 
-// 修复1：重构selectFunction，区分“点击居中卡（跳转）”和“点击侧卡（滑动）”
+// 当前选中卡片
 const selectFunction = (idx) => {
   if (isTransitioning.value) return;
   
@@ -174,7 +165,7 @@ const nextFunction = () => {
   currentIndex.value++;
 };
 
-// 核心修改：控制仅显示当前卡片+左右各一张，隐藏其他卡片
+// 控制仅显示当前卡片+左右各一张，隐藏其他卡片
 const getCardStyle = (idx) => {
   const offset = idx - currentIndex.value;
   const baseZ = 10 - Math.abs(offset);
@@ -200,7 +191,7 @@ const getCardStyle = (idx) => {
   };
 };
 
-// 修复2：重构watch逻辑，仅处理无缝滚动，移除错误的跳转逻辑
+// 处理卡片滑动逻辑
 watch(currentIndex, (val, oldVal) => {
   if (!isTransitioning.value) return;
   
@@ -213,7 +204,7 @@ watch(currentIndex, (val, oldVal) => {
       currentIndex.value = 1;
       isTransitioning.value = false;
     } else {
-      // 动画结束后重置状态（延迟匹配动画时长）
+      // 动画结束后重置状态
       setTimeout(() => {
         isTransitioning.value = false;
       }, 400);
@@ -247,11 +238,8 @@ watch(currentIndex, (val, oldVal) => {
   <transition name="fade">
     <div v-if="transitionStage === 'loading'" class="transition-overlay loading">
       <div class="loading-animation">
-        <!-- 核心修复：使用script中定义的变量，移除模板中的import.meta.url -->
         <video class="loading-video" autoplay loop muted playsinline preload="auto">
           <source :src="loadingVideoUrl" type="video/mp4">
-          <!-- 如果是webm格式，将上面的type改为：type="video/webm" -->
-          <!-- 降级方案：如果视频无法播放，显示原图片 -->
           <img src="@/assets/skadi-01.jpg" class="loading-img" alt="加载中" />
         </video>
         <div class="loading-text">{{ loadingText }}</div>
@@ -265,18 +253,24 @@ watch(currentIndex, (val, oldVal) => {
   </transition>
   
   <div class="ark-minimal-dark">
-    <!-- 新增：白色正方形背景装饰容器 -->
+    <!-- 白色正方形背景装饰容器 -->
     <div class="square-decorations-container"></div>
     
     <header class="ark-navbar">
       <div class="ark-navbar-bg">
-        <!-- 预留本地图片背景，后续可替换src/assets/bg.jpg -->
       </div>
       <div class="ark-navbar-center">
         <h1 class="ark-title-gradient">ArkSpeaking</h1>
       </div>
     </header>
     
+    <div class="line-decorations-container">
+      <div class="line-1"></div>
+      <div class="line-2"></div>
+      <div class="line-3"></div>
+      <div class="line-4"></div>
+    </div>
+
     <main class="ark-main">
         <div class="ark-carousel-wrap">
           <div class="ark-carousel">
@@ -317,10 +311,10 @@ watch(currentIndex, (val, oldVal) => {
   font-family: 'HarmonyOS Sans SC', '思源黑体', 'PingFang SC', 'Arial Black', '微软雅黑', sans-serif;
   display: flex;
   flex-direction: column;
-  position: relative; /* 新增：为绝对定位的正方形装饰提供父容器 */
+  position: relative; /* 为绝对定位的正方形装饰提供父容器 */
 }
 
-/* 新增：白色正方形背景装饰样式 */
+/* 白色正方形背景装饰样式 */
 .square-decorations-container {
   position: fixed;
   top: 0;
@@ -394,14 +388,14 @@ watch(currentIndex, (val, oldVal) => {
   z-index: 0;
 }
 
-/* 正方形浮动动画：缓慢移动+轻微旋转，保持极简动态感 */
+/* 正方形浮动动画 */
 @keyframes squareFloat {
   0% {
     transform: translate(0, 0) rotate(0deg);
     opacity: 0.8;
   }
   50% {
-    transform: translate(20px, -20px) rotate(5deg);
+    transform: translate(40px, -40px) rotate(10deg);
     opacity: 0.8;
   }
   100% {
@@ -409,6 +403,7 @@ watch(currentIndex, (val, oldVal) => {
     opacity: 0.8;
   }
 }
+
 
 .ark-navbar {
   position: relative;
@@ -538,10 +533,10 @@ watch(currentIndex, (val, oldVal) => {
   z-index: 30;
 }
 .ark-carousel-btn:hover { transform: translateY(-50%) scale(1.04); }
-.ark-carousel-btn.left { left: 20px; } /* 修正左侧按钮位置 */
-.ark-carousel-btn.right { right: 0%; } /* 修正右侧按钮位置，从-600px改为-60px */
+.ark-carousel-btn.left { left: 20px; } /* 左侧按钮位置 */
+.ark-carousel-btn.right { right: 0%; } /* 右侧按钮位置，从-600px改为-60px */
 
-/* 轮播卡片样式 - 核心修改：优化尺寸避免重叠 */
+/* 轮播卡片样式  */
 .ark-function-card {
   position: absolute;
   left: 35%;
@@ -629,7 +624,7 @@ watch(currentIndex, (val, oldVal) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.12);
+  background: rgb(255, 255, 255);
   pointer-events: all;
   transition: background 0.3s;
 }
@@ -643,7 +638,7 @@ watch(currentIndex, (val, oldVal) => {
   animation: shrinkToDot 0.6s cubic-bezier(.7,-0.2,.7,1.2) forwards;
 }
 .transition-overlay.loading {
-  background: rgba(255,255,255,0.92);
+  background: rgb(255, 255, 255);
   flex-direction: column;
 }
 .loading-animation {

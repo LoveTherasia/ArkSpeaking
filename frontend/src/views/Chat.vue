@@ -9,7 +9,7 @@ import {
   UserFilled, 
   ChatDotRound, 
   Postcard 
-} from '@element-plus/icons-vue';
+} from '@element-plus/icons-vue'; 
 
 axios.defaults.baseURL = 'http://localhost:8080';
 
@@ -542,6 +542,7 @@ const closeDialog = () => dialogVisible.value = false;
       </div>
 
       <div v-if="['characterDetail', 'characterChat'].includes(currentViewMode)" class="left-content">
+        <!-- 聊天视图 -->
         <div v-if="currentViewMode === 'characterChat'" class="character-list">
           <div v-for="char in characterList" :key="char.characterId"
             class="character-card" :class="{ active: currentCharacter?.characterId === char.characterId }"
@@ -554,14 +555,15 @@ const closeDialog = () => dialogVisible.value = false;
           </div>
         </div>
 
-        <div v-else class="character-detail-list">
+        <!-- 详情视图 -->
+        <div v-else class="character-list">
           <div v-for="char in characterList" :key="char.characterId"
-            class="detail-card" :class="{ active: currentDetailCharacter?.characterId === char.characterId }"
+            class="character-card" :class="{ active: currentDetailCharacter?.characterId === char.characterId }"
             @click="selectDetailCharacter(char)">
-            <div class="detail-avatar" :style="{ backgroundImage: `url(${char.avatar})` }"></div>
-            <div class="detail-info">
-              <div class="detail-name">{{ char.name }}</div>
-              <div class="detail-brief">{{ truncateText(char.brief, 12) }}</div>
+            <div class="char-avatar" :style="{ backgroundImage: `url(${char.avatar})` }"></div>
+            <div class="char-info">
+              <div class="char-name">{{ char.name }}</div>
+              <div class="char-lastMsg">{{ truncateText(char.brief, 18) }}</div>
             </div>
           </div>
         </div>
@@ -594,16 +596,15 @@ const closeDialog = () => dialogVisible.value = false;
       </div>
 
       <div class="main-body" ref="messageContainer">
+        <!-- 聊天视图 -->
         <div v-if="currentViewMode === 'characterChat'">
           <div v-for="(msg, i) in messages" :key="i"
             class="msg-item" :class="{ user: msg.sender === 'user', ai: msg.sender === 'ai' }">
-            <!-- 3. 【修改】userAvatar 改为 userInfo.avatar -->
             <img :src="msg.sender === 'user' ? userInfo.avatar : currentCharacter?.avatar" class="msg-avatar" />
             <div class="msg-bubble">{{ msg.content }}</div>
           </div>
 
           <div class="loading-ai" v-if="isLoading">
-            <!-- 4. 【修改】userAvatar 改为 userInfo.avatar -->
             <img :src="currentCharacter?.avatar || userInfo.avatar" class="msg-avatar" />
             <div class="loading-text"><Loading class="spin" /> 正在输入...</div>
           </div>
@@ -641,6 +642,7 @@ const closeDialog = () => dialogVisible.value = false;
         </div>
       </div>
 
+      <!-- 聊天输入框 -->
       <textarea v-if="currentViewMode === 'characterChat'"
         v-model="inputMessage"
         class="input-box"
@@ -650,17 +652,14 @@ const closeDialog = () => dialogVisible.value = false;
       />
     </div>
 
-    <!-- 9. 重构：右侧区域根据视图模式动态切换 -->
     <div class="right" v-if="currentViewMode === 'characterChat' || currentViewMode === 'characterDetail'">
-      <!-- 聊天视图：显示Live2D -->
       <!-- <div v-if="currentViewMode === 'characterChat'" class="live2d-container">
         <div id="live2d-container" class="live2d-wrapper">
           <div v-if="!live2dLoaded" class="live2d-loading">
             <Loading class="spin" /> 加载Live2D模型中...
           </div>
-        </div> -->
-        <!-- Live2D模型切换按钮 -->
-        <!-- <div class="live2d-controls">
+        </div>
+        <div class="live2d-controls">
           <button class="model-btn" @click="switchLive2dModel('haru01')" :class="{ active: currentLive2dModelId === 'haru01' }">
             模型1
           </button>
@@ -673,28 +672,28 @@ const closeDialog = () => dialogVisible.value = false;
         </div>
       </div> -->
 
-      <!-- 角色详情视图：显示原详情 -->
+      <!-- 角色详情视图 -->
       <div v-if="characterDetail">
         <div v-if="rightLoading" class="right-loading">
           <Loading class="spin" /> 加载中...
         </div>
         <div v-else-if="currentDetailCharacter && characterDetail" class="char-info-card">
-          <div class="char-detail-header chat-style">
+          <div class="char-detail-header">
             <div class="avatar-block">
               <img :src="currentDetailCharacter.avatar" class="right-avatar big" />
             </div>
             <div class="char-name-block">
-              <h3 class="char-name chat-style">{{ characterDetail.name }}</h3>
-              <span class="char-title chat-style" v-if="characterDetail.title">{{ characterDetail.title }}</span>
+              <h3 class="char-name">{{ characterDetail.name }}</h3>
+              <span class="char-title" v-if="characterDetail.title">{{ characterDetail.title }}</span>
             </div>
           </div>
-          <div class="favor-bar beautify chat-style">
+          <div class="favor-bar">
             <div class="label">好感度 <span class="favor-num">{{ favor }}</span>/200</div>
-            <div class="bar beautify"><div class="bar-fill beautify" :style="{ width: `${favor/2}%` }"></div></div>
+            <div class="bar"><div class="bar-fill" :style="{ width: `${favor/2}%` }"></div></div>
           </div>
-          <div class="char-info-section chat-style">
-            <div class="brief chat-style" v-if="characterDetail.brief">{{ characterDetail.brief }}</div>
-            <div class="char-meta chat-style">
+          <div class="char-info-section">
+            <div class="brief" v-if="characterDetail.brief">{{ characterDetail.brief }}</div>
+            <div class="char-meta">
               <div v-if="characterDetail.gender"><span class="meta-label">性别：</span>{{ characterDetail.gender }}</div>
               <div v-if="characterDetail.age"><span class="meta-label">年龄：</span>{{ characterDetail.age }}</div>
               <div v-if="characterDetail.birthday"><span class="meta-label">生日：</span>{{ characterDetail.birthday }}</div>
@@ -786,7 +785,6 @@ const closeDialog = () => dialogVisible.value = false;
   gap: 10px;
   cursor: pointer;
   min-height: 70px;
-  /* 防止内部元素溢出卡片 */
   overflow: hidden;
 }
 
@@ -801,7 +799,6 @@ const closeDialog = () => dialogVisible.value = false;
   border-radius: 50%;
   background-size: cover;
   background-position: center;
-  /* 核心：禁止头像被挤压 */
   flex-shrink: 0;
   flex-grow: 0;
 }
@@ -811,7 +808,6 @@ const closeDialog = () => dialogVisible.value = false;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  /* 限制文字区域宽度，避免挤占头像 */
   width: calc(100% - 54px);
   overflow: hidden;
 }
@@ -820,7 +816,6 @@ const closeDialog = () => dialogVisible.value = false;
   font-size: 15px;
   font-weight: 500;
   color: #2d3748;
-  /* 超长昵称自动截断 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -832,50 +827,7 @@ const closeDialog = () => dialogVisible.value = false;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* 固定行高，防止换行挤压 */
   line-height: 1.2;
-}
-
-/* 详情模式角色卡片 */
-.detail-card {
-  background: #fff;
-  border-radius: 10px;
-  padding: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-}
-
-.detail-card.active {
-  border: 2px solid #4299e1;
-  background: #f0f7ff;
-}
-
-.detail-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background-size: cover;
-  /* 同步防挤压 */
-  flex-shrink: 0;
-}
-
-.detail-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.detail-name {
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.detail-brief {
-  font-size: 12px;
-  color: #718096;
 }
 
 /* 功能按钮容器 */
@@ -903,7 +855,7 @@ const closeDialog = () => dialogVisible.value = false;
   color: #fff;
 }
 
-/* 朋友圈模式：左侧用户面板 */
+/* 朋友圈模式左侧用户面板 */
 .left-user-panel {
   flex: 1;
   display: flex;
@@ -1042,7 +994,7 @@ const closeDialog = () => dialogVisible.value = false;
   color: #9ca3af;
 }
 
-/* 右侧区域 - 统一样式 */
+/* 右侧区域 - 基础样式 */
 .right {
   width: 320px;
   background: #f8f9fa;
@@ -1052,7 +1004,7 @@ const closeDialog = () => dialogVisible.value = false;
   align-items: center;
 }
 
-/* 10. 新增：Live2D容器样式 */
+/* Live2D容器样式 */
 .live2d-container {
   width: 100%;
   height: 100%;
@@ -1111,12 +1063,13 @@ const closeDialog = () => dialogVisible.value = false;
   color: #718096;
 }
 
+/* 右侧详情卡片 */
 .char-info-card {
-  background: #fff;
-  border-radius: 18px;
+  background: #cac6c6; /* 对齐聊天卡片背景色 */
+  border-radius: 100px; /* 对齐聊天卡片圆角 */
   padding: 28px 18px 22px 18px;
   text-align: center;
-  box-shadow: 0 2px 16px 0 rgba(180,160,220,0.10), 0 1.5px 8px 0 rgba(180,160,220,0.08);
+  box-shadow: none; /* 移除阴影，对齐聊天卡片 */
   position: relative;
   overflow: visible;
   min-width: 280px;
@@ -1125,8 +1078,10 @@ const closeDialog = () => dialogVisible.value = false;
   display: flex;
   flex-direction: column;
   align-items: center;
+  border: 1px solid #4299e1; /* 对齐聊天卡片选中边框 */
 }
-.char-detail-header.chat-style {
+
+.char-detail-header {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1134,97 +1089,116 @@ const closeDialog = () => dialogVisible.value = false;
   gap: 8px;
   margin-bottom: 10px;
 }
+
 .avatar-block {
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 8px;
 }
+
 .right-avatar.big {
   width: 96px;
   height: 96px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid #e9d8fd;
+  border: 3px solid #cac6c6; /* 对齐聊天卡片背景色 */
   background: #fff;
-  box-shadow: 0 2px 12px #b89de622;
+  box-shadow: none;
 }
+
 .char-name-block {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
 }
-.char-name.chat-style {
-  font-size: 1.3rem;
+
+/* 详情卡片文字 */
+.char-name {
+  font-size: 1.0rem;
   font-weight: 700;
-  color: #7c3aed;
+  color: #2d3748; /* 对齐聊天卡片主文字色 */
   margin-bottom: 2px;
   letter-spacing: 1px;
 }
-.char-title.chat-style {
+
+.char-title {
   font-size: 0.95rem;
-  color: #b89de6;
-  background: #f3e8ff;
+  color: #718096; /* 对齐聊天卡片辅助文字色 */
+  background: #cac6c6; /* 对齐聊天卡片背景色 */
   border-radius: 8px;
   padding: 2px 10px;
   margin-left: 2px;
 }
-.favor-bar.beautify.chat-style {
+
+.favor-bar {
   margin: 10px 0 6px 0;
 }
-.favor-bar.beautify .label {
+
+/* 好感度文字 */
+.favor-bar .label {
   font-size: 14px;
-  color: #a78bfa;
+  color: #718096; /* 对齐聊天卡片辅助文字色 */
   margin-bottom: 4px;
   font-weight: 500;
 }
-.favor-bar.beautify .favor-num {
-  color: #f472b6;
+
+.favor-bar .favor-num {
+  color: #2d3748; /* 对齐聊天卡片主文字色 */
   font-weight: bold;
   font-size: 1.1em;
   margin: 0 2px;
 }
-.bar.beautify {
+
+/* 好感度进度条：对齐聊天卡片风格 */
+.bar {
   width: 140px;
   height: 8px;
-  background: linear-gradient(90deg, #e0e7ff 0%, #f3e8ff 100%);
+  background: #cac6c6; /* 对齐聊天卡片背景色 */
   border-radius: 6px;
   overflow: hidden;
   margin: 0 auto;
-  box-shadow: 0 1px 4px #b89de622;
+  box-shadow: none;
 }
-.bar-fill.beautify {
+
+.bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #a78bfa 0%, #f472b6 100%);
+  background: #4299e1; /* 对齐选中色 */
   transition: width .5s cubic-bezier(.4,1.4,.6,1);
   border-radius: 6px 0 0 6px;
 }
-.char-info-section.chat-style {
+
+.char-info-section {
   margin-top: 10px;
   text-align: left;
   width: 100%;
 }
-.brief.chat-style {
+
+/* 详情简介 */
+.brief {
   font-size: 14px;
-  color: #7c3aed;
+  color: #2d3748; /* 对齐聊天卡片主文字色 */
   margin-bottom: 8px;
   text-align: left;
   line-height: 1.7;
-  background: #f3e8ff55;
+  background: #cac6c6; /* 对齐聊天卡片背景色 */
   border-radius: 8px;
   padding: 6px 10px;
 }
-.char-meta.chat-style {
+
+/* 详情元信息 */
+.char-meta {
   margin-top: 4px;
-  color: #6d28d9;
+  color: #2d3748; /* 对齐聊天卡片主文字色 */
   font-size: 13px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
 }
+
 .meta-label {
-  color: #a78bfa;
+  color: #718096; /* 对齐聊天卡片辅助文字色 */
   font-weight: 500;
   margin-right: 2px;
 }
@@ -1235,38 +1209,6 @@ const closeDialog = () => dialogVisible.value = false;
   border-radius: 50%;
   object-fit: cover;
   margin-bottom: 12px;
-}
-
-.favor-bar {
-  margin: 12px 0;
-}
-
-.label {
-  font-size: 14px;
-  color: #718096;
-  margin-bottom: 4px;
-}
-
-.bar {
-  width: 200px;
-  height: 8px;
-  background: #e2e8f0;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  background: #48bb78;
-  transition: width .3s;
-}
-
-.brief {
-  font-size: 14px;
-  color: #4a5568;
-  margin-top: 12px;
-  text-align: left;
-  line-height: 1.6;
 }
 
 .right-empty {
@@ -1369,4 +1311,4 @@ const closeDialog = () => dialogVisible.value = false;
 .spin {
   animation: spin 1.5s linear infinite;
 }
-</style>
+</style>  

@@ -21,6 +21,11 @@ const router = createRouter({
             path:'/user/edit',
             name:'UserEdit',
             component: UserEdit
+        },
+        {
+            path:'/paperAnalysis',
+            name:'PaperAnalysis',
+            component:()=>import('./views/PaperAnalysis.vue')
         }
     ]
 });
