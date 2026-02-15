@@ -10,3 +10,12 @@ CREATE TABLE IF NOT EXISTS `user` ( -- 表名加反引号，规避关键字冲�
 -- 插入默认用户（保留，反引号可选）
 INSERT IGNORE INTO `user` (nickname, avatar, signature)
 VALUES ('博士', 'http://localhost:8080/avatar/default.jpg', '与角色的日常');
+
+-- 创建角色表（兼容H2+MySQL）
+CREATE TABLE IF NOT EXISTS t_character (
+                                           char_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                                           char_name VARCHAR(255) NOT NULL,
+                                           avatar_path VARCHAR(512),
+                                           prompt_file_path VARCHAR(512),
+                                           is_preset BOOLEAN DEFAULT FALSE
+);

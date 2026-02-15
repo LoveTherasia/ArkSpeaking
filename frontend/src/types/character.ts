@@ -1,29 +1,40 @@
-/** 角色基础信息类型（存储在数据库） */
+// src/types/character.ts
+/** 角色实体类型（严格对接后端Character实体） */
 export interface Character {
-  /** 角色唯一ID（前端预生成，后端校验唯一性） */
-  id: string;
-  /** 角色名称 */
+  id: number; // 后端主键通常是number，修正原string类型
   name: string;
-  /** 头像文件路径（后端存储路径：/character/{id}.png/jpg） */
-  avatarPath: string;
-  /** 提示词文件路径（后端存储路径：/character/prompt/{id}.txt） */
-  promptFilePath: string;
-  /** 是否为预设角色（不可删除） */
-  isPreset: boolean;
+  avatarPath: string; // 后端返回的头像存储路径
+  promptContent: string;
+  isPreset: boolean; // 是否预设角色
+  createTime?: string; // 后端返回的创建时间
+  status?: 'ENABLE' | 'DISABLE'; // 角色状态（后端新增）
 }
 
-/** 新增角色请求参数（前端提交给后端） */
+/** 新增角色的请求参数（包含文件，需用FormData传递） */
 export interface CreateCharacterRequest {
   name: string;
-  /** 头像文件（FormData上传） */
-  avatarFile: File | null;
-  /** 提示词内容（单独上传为文本文件） */
+  avatarFile: File | null; // 头像文件
   promptContent: string;
 }
 
-/** 角色API响应通用格式 */
-export interface CharacterApiResponse<T = any> {
-  code: number;
-  message: string;
-  data: T;
+/** 分页请求参数（对接后端Pageable） */
+export interface PageRequest {
+  page: number; // 后端从0开始
+  size: number;
+}
+
+/** 后端分页返回结构 */
+export interface PageResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+}
+
+/** 前端分页参数（Element Plus分页组件用，从1开始） */
+export interface FrontPageParams {
+  pageNum: number;
+  pageSize: number;
+  total: number;
 }

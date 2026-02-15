@@ -23,8 +23,25 @@ public class Result<T> {
         return new Result<>(0,"操作成功",null);
     }
 
+    public static <T> Result<T> success(String message,T data){
+        Result<T> response = new Result<>();
+        response.setCode(200);
+        response.setMessage(message);
+        response.setData(data);
+        return response;
+    }
+
+
     //返回操作失败
-    public static Result<Void> error(String message){
+    public static <T> Result<T> error(String message){
         return new Result<>(1,message,null);
+    }
+
+    public static <T> Result<T> error(int code,String message){
+        Result<T> response = new Result<>();
+        response.setCode(code);
+        response.setMessage(message);
+        response.setData(null);
+        return response;
     }
 }

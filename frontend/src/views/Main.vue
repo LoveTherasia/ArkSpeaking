@@ -16,7 +16,6 @@ onMounted(async () => {
   const saved = localStorage.getItem('ark_theme');
   if (saved === 'dark') isNight.value = true;
   characterList.value = await loadCharacter();
-  initBackgroundDecorations();
 });
 
 const toggleTheme = () => {

@@ -2,7 +2,8 @@
 import { ref, onMounted, watch } from 'vue';
 import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElUpload, ElMessage, ElMessageBox } from 'element-plus';
 import router from '@/router';
-import type { Character, CreateCharacterRequest } from '@/types/character';
+// 确保CreateCharacterRequest中avatarFile类型为File | null
+import type { Character, CreateCharacterRequest, PageResponse } from '@/types/character';
 import {
   getCharacterList,
   getCharacterById,
@@ -14,69 +15,73 @@ import {
 } from '@/api/character';
 
 // ===================== 核心状态 =====================
-const characterList = ref<Character[]>([]); // 所有角色列表
-const selectedCharacterId = ref<string>(''); // 当前选中角色ID
-// 【关键修改1】用ref存储当前选中的角色（同步变量，模板可直接读取）
+const characterList = ref<Character[]>([]); 
+// 修改点1：统一ID类型为number（和API层一致）
+const selectedCharacterId = ref<number>(0); 
 const selectedCharacter = ref<Character | null>(null); 
-const fileUploadDialogVisible = ref(false); // 上传论文弹窗
-const characterSelectDialogVisible = ref(false); // 选择角色弹窗
-const addCharacterDialogVisible = ref(false); // 新增角色弹窗
+const fileUploadDialogVisible = ref(false); 
+const characterSelectDialogVisible = ref(false); 
+const addCharacterDialogVisible = ref(false); 
 
-// 新增角色表单（TS类型约束）
+// 新增角色表单
 const newCharacterForm = ref<CreateCharacterRequest>({
   name: '',
   avatarFile: null,
   promptContent: ''
 });
 
-// 上传论文相关
 const uploadFileList = ref<File[]>([]);
 const allowedFileExtensions = ['txt', 'pdf', 'docx'];
 
 // ===================== 核心方法 =====================
-// 【关键修改2】封装异步获取角色信息的函数，更新selectedCharacter ref
-const fetchCharacterById = async (id: string) => {
+const fetchCharacterById = async (id: number) => {
   if (!id) {
     selectedCharacter.value = null;
     return;
   }
+  // 修改点2：接收null返回值，避免赋值失败
   const char = await getCharacterById(id);
   selectedCharacter.value = char;
 };
 
 // 初始化角色列表
 const initCharacterList = async (): Promise<void> => {
-  const list = await getCharacterList();
-  characterList.value = list;
-  
-  // 初始化选中角色ID
-  const savedId = getSelectedCharacterId();
-  const presetChar = list.find(char => char.isPreset) || list[0];
-  selectedCharacterId.value = savedId && list.some(char => char.id === savedId) 
-    ? savedId 
-    : presetChar?.id || '';
-  
-  // 【关键修改3】初始化时获取选中角色的信息
-  if (selectedCharacterId.value) {
-    await fetchCharacterById(selectedCharacterId.value);
-    saveSelectedCharacterId(selectedCharacterId.value);
+  try {
+    // 修改点3：调用getCharacterList时传默认分页参数（或自定义）
+    const pageRes: PageResponse<Character> = await getCharacterList({ pageNum: 1, pageSize: 20 });
+    characterList.value = pageRes.list || []; // 取分页结果中的list
+    
+    // 初始化选中角色ID
+    const savedId = getSelectedCharacterId();
+    const presetChar = characterList.value.find(char => char.isPreset) || characterList.value[0];
+    selectedCharacterId.value = savedId && characterList.value.some(char => char.id === savedId) 
+      ? savedId 
+      : presetChar?.id || 0;
+    
+    if (selectedCharacterId.value) {
+      await fetchCharacterById(selectedCharacterId.value);
+      saveSelectedCharacterId(selectedCharacterId.value);
+    }
+  } catch (error) {
+    // 修改点4：捕获初始化异常，避免mounted钩子崩溃
+    console.error('初始化角色列表失败:', error);
+    ElMessage.error('角色列表加载失败，请刷新页面');
   }
 };
 
 // 选择角色
 const selectCharacter = async (char: Character): Promise<void> => {
+  if (!char?.id) return;
   selectedCharacterId.value = char.id;
-  // 【关键修改4】选择角色时更新选中的角色信息
   await fetchCharacterById(char.id);
   saveSelectedCharacterId(char.id);
   characterSelectDialogVisible.value = false;
   
-  // 读取该角色的提示词（演示用）
   const prompt = await getCharacterPromptById(char.id);
   ElMessage.success(`已选择角色：${char.name}（提示词长度：${prompt.length}字符）`);
 };
 
-// 【关键修改5】监听selectedCharacterId变化，自动更新角色信息
+// 监听selectedCharacterId变化
 watch(selectedCharacterId, async (newId) => {
   if (newId) {
     await fetchCharacterById(newId);
@@ -103,50 +108,41 @@ const saveNewCharacter = async (): Promise<void> => {
     return;
   }
 
-  // 调用后端接口新增角色
   const newChar = await createCharacter(newCharacterForm.value);
   if (newChar) {
-    // 添加到本地列表
     characterList.value.push(newChar);
-    // 重置表单
-    newCharacterForm.value = {
-      name: '',
-      avatarFile: null,
-      promptContent: ''
-    };
+    newCharacterForm.value = { name: '', avatarFile: null, promptContent: '' };
     addCharacterDialogVisible.value = false;
     ElMessage.success('新增角色成功');
+  } else {
+    ElMessage.error('新增角色失败，请重试');
   }
 };
 
 // 删除角色
-const handleDeleteCharacter = async (id: string): Promise<void> => {
+const handleDeleteCharacter = async (id: number): Promise<void> => {
   ElMessageBox.confirm(
     '此操作将永久删除该角色及相关文件，是否继续？',
     '提示',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }
+    { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
   ).then(async () => {
     const success = await deleteCharacter(id);
     if (success) {
-      // 从本地列表移除
       characterList.value = characterList.value.filter(char => char.id !== id);
-      // 如果删除的是当前选中角色，重新选中第一个角色
       if (selectedCharacterId.value === id) {
         const defaultChar = characterList.value[0];
         if (defaultChar) {
           selectedCharacterId.value = defaultChar.id;
-          // 同步更新选中的角色信息
           await fetchCharacterById(defaultChar.id);
           saveSelectedCharacterId(defaultChar.id);
         } else {
-          selectedCharacterId.value = '';
+          selectedCharacterId.value = 0;
           selectedCharacter.value = null;
         }
       }
+      ElMessage.success('删除角色成功');
+    } else {
+      ElMessage.error('删除角色失败，请重试');
     }
   }).catch(() => {
     ElMessage.info('已取消删除');
@@ -183,7 +179,6 @@ const handleStartGame = async (): Promise<void> => {
   const file = uploadFileList.value[0];
   fileUploadDialogVisible.value = false;
   
-  // 获取角色提示词
   const prompt = await getCharacterPromptById(selectedCharacterId.value);
 
   ElMessage.success(`开始解析论文：${file.name}，使用角色：${selectedCharacter.value.name}`);
@@ -193,8 +188,6 @@ const handleStartGame = async (): Promise<void> => {
     characterName: selectedCharacter.value.name,
     promptLength: prompt.length
   });
-  
-  // 后续可调用论文解析接口：/api/paper/analyze
 };
 
 // 退出返回首页

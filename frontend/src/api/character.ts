@@ -1,151 +1,103 @@
-// api/character.ts (建议新建此文件)
-import type { Character, CreateCharacterRequest, CharacterApiResponse } from '@/types/character';
+import request from '@/utils/request';
+import { Character, CreateCharacterRequest, PageRequest, PageResponse } from '@/types/character';
 
-/** 生成前端唯一角色ID（UUID格式，保证本地唯一性） */
-export const generateUniqueCharId = (): string => {
-  // UUID v4 简化版，也可使用uuid库
-  return 'char_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-};
-
-/** 检查角色ID是否已存在（调用后端接口校验） */
-export const checkCharIdExist = async (id: string): Promise<boolean> => {
-  try {
-    const res = await fetch(`/api/character/check-id/${id}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    const data = await res.json() as CharacterApiResponse<boolean>;
-    return data.code === 200 ? data.data : false;
-  } catch (error) {
-    console.error('校验角色ID失败：', error);
-    return false;
+// ===================== 本地存储选中角色ID =====================
+// 修改点1：统一ID类型为number，处理空值
+export const saveSelectedCharacterId = (id: number | ''): void => {
+  if (id) {
+    localStorage.setItem('selectedCharacterId', id.toString());
+  } else {
+    localStorage.removeItem('selectedCharacterId');
   }
 };
 
-/** 获取所有角色列表（基础信息） */
-export const getCharacterList = async (): Promise<Character[]> => {
+export const getSelectedCharacterId = (): number => {
+  const id = localStorage.getItem('selectedCharacterId');
+  // 修改点2：空值返回0而非空字符串，避免类型混乱
+  return id ? Number(id) : 0;
+};
+
+// ===================== 角色接口（对接后端） =====================
+/**
+ * 获取角色列表（分页）
+ * @param pageRequest 分页参数（默认第一页，10条/页）
+ */
+export const getCharacterList = async (
+  pageRequest: PageRequest = { pageNum: 1, pageSize: 10 } // 修改点3：添加默认分页参数
+): Promise<PageResponse<Character>> => {
   try {
-    const res = await fetch('/api/character/list', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+    return await request.get('/api/character/list', {
+      params: pageRequest
     });
-    const data = await res.json() as CharacterApiResponse<Character[]>;
-    return data.code === 200 ? data.data : [];
   } catch (error) {
-    console.error('获取角色列表失败：', error);
-    return [];
+    console.error('获取角色列表失败:', error);
+    // 返回空列表，避免组件崩溃
+    return { list: [], total: 0, pageNum: 1, pageSize: 10 };
   }
 };
 
-/** 通过ID获取角色基础信息 */
-export const getCharacterById = async (id: string): Promise<Character | null> => {
+/**
+ * 根据ID查询角色详情
+ * @param id 角色ID
+ */
+export const getCharacterById = async (id: number): Promise<Character | null> => { // 修改点4：返回null兼容空值
+  if (!id || id <= 0) return null; // 过滤无效ID
   try {
-    const res = await fetch(`/api/character/${id}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    const data = await res.json() as CharacterApiResponse<Character>;
-    return data.code === 200 ? data.data : null;
+    return await request.get(`/api/character/${id}`);
   } catch (error) {
-    console.error(`获取角色${id}信息失败：`, error);
+    console.error(`查询角色${id}失败:`, error);
     return null;
   }
 };
 
-/** 通过ID读取角色提示词（后端读取/character/prompt/{id}.txt） */
-export const getCharacterPromptById = async (id: string): Promise<string> => {
+/**
+ * 根据ID查询角色提示词
+ * @param id 角色ID
+ */
+export const getCharacterPromptById = async (id: number): Promise<string> => {
+  if (!id || id <= 0) return '';
   try {
-    const res = await fetch(`/api/character/${id}/prompt`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-    });
-    if (res.ok) {
-      return await res.text();
-    }
-    console.error(`读取角色${id}提示词失败：`, res.statusText);
-    return '';
+    return await request.get(`/api/character/${id}/prompt`);
   } catch (error) {
-    console.error(`读取角色${id}提示词失败：`, error);
+    console.error(`查询角色${id}提示词失败:`, error);
     return '';
   }
 };
 
-/** 新增角色（含头像+提示词文件上传） */
-export const createCharacter = async (req: CreateCharacterRequest): Promise<Character | null> => {
-  // 1. 生成前端唯一ID，并校验后端是否已存在
-  let charId = generateUniqueCharId();
-  while (await checkCharIdExist(charId)) {
-    charId = generateUniqueCharId(); // 重复则重新生成
+/**
+ * 新增角色（含头像文件上传）
+ */
+export const createCharacter = async (data: CreateCharacterRequest): Promise<Character | null> => {
+  if (!data.name || !data.promptContent || !data.avatarFile) {
+    console.error('新增角色参数不全');
+    return null;
   }
-
-  // 2. 构造FormData（上传文件+基础信息）
-  const formData = new FormData();
-  formData.append('id', charId);
-  formData.append('name', req.name);
-  if (req.avatarFile) {
-    formData.append('avatarFile', req.avatarFile, `${charId}.${req.avatarFile.name.split('.').pop()}`);
-  }
-  formData.append('promptContent', req.promptContent);
-
-  // 3. 调用后端接口
   try {
-    const res = await fetch('/api/character/create', {
-      method: 'POST',
-      body: formData, // 上传文件必须用FormData
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('promptContent', data.promptContent);
+    formData.append('avatarFile', data.avatarFile);
+
+    return await request.post('/api/character', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
     });
-    const data = await res.json() as CharacterApiResponse<Character>;
-    if (data.code === 200) {
-      return data.data;
-    } else {
-      ElMessage.error(`新增角色失败：${data.message}`);
-      return null;
-    }
   } catch (error) {
-    console.error('新增角色失败：', error);
-    ElMessage.error('新增角色失败，请重试');
+    console.error('新增角色失败:', error);
     return null;
   }
 };
 
-/** 删除角色（仅自定义角色） */
-export const deleteCharacter = async (id: string): Promise<boolean> => {
+/**
+ * 删除角色
+ */
+export const deleteCharacter = async (id: number): Promise<boolean> => {
+  if (!id || id <= 0) return false;
   try {
-    const res = await fetch(`/api/character/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    const data = await res.json() as CharacterApiResponse;
-    if (data.code === 200) {
-      ElMessage.success('角色删除成功');
-      return true;
-    } else {
-      ElMessage.error(`删除角色失败：${data.message}`);
-      return false;
-    }
+    const res = await request.delete(`/api/character/${id}`);
+    // 兼容后端不同的成功响应格式
+    return res?.code === 200 || res?.success === true || res === true;
   } catch (error) {
-    console.error(`删除角色${id}失败：`, error);
-    ElMessage.error('删除角色失败，请重试');
+    console.error(`删除角色${id}失败:`, error);
     return false;
   }
-};
-
-/** 保存角色选中状态（可选：也可调用后端接口保存用户偏好） */
-export const saveSelectedCharacterId = (id: string): void => {
-  // 前端临时存储（也可调用/api/character/selected/{id}接口）
-  sessionStorage.setItem('selected_character_id', id);
-};
-
-/** 获取已选中的角色ID */
-export const getSelectedCharacterId = (): string => {
-  return sessionStorage.getItem('selected_character_id') || '';
 };
