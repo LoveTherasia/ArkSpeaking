@@ -1,4 +1,5 @@
 <script setup>
+// 脚本部分无变化，保持原有逻辑
 import { computed, ref, onMounted, nextTick, watch } from 'vue';
 import { loadCharacter } from '@/utils/loadCharacter';
 import router from '@/router.js';
@@ -253,7 +254,10 @@ watch(currentIndex, (val, oldVal) => {
   
   <div class="ark-minimal-dark">
     <!-- 白色正方形背景装饰容器 -->
-    <div class="square-decorations-container"></div>
+    <div class="square-decorations-container">
+      <!-- 修复：添加正方形4的DOM元素 -->
+      <div class="square-4"></div>
+    </div>
     
     <header class="ark-navbar">
       <div class="ark-navbar-bg">
@@ -274,8 +278,9 @@ watch(currentIndex, (val, oldVal) => {
         <div class="ark-carousel-wrap">
           <div class="ark-carousel">
             <button class="ark-carousel-btn left" @click="prevFunction" aria-label="上一张">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M15 6L9 12L15 18" stroke="#23272a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- 核心修改：箭头尺寸改为70x160，适配80x180的竖长按钮 -->
+              <svg width="70" height="160" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M15 6L9 12L15 18" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
 
@@ -290,8 +295,9 @@ watch(currentIndex, (val, oldVal) => {
             </div>
 
             <button class="ark-carousel-btn right" @click="nextFunction" aria-label="下一张">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M9 6L15 12L9 18" stroke="#23272a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- 核心修改：箭头尺寸改为70x160，适配80x180的竖长按钮 -->
+              <svg width="70" height="160" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 6L15 12L9 18" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
           </div>
@@ -300,7 +306,7 @@ watch(currentIndex, (val, oldVal) => {
     </div>
 </template>
 
-<!-- 合并所有样式，修正语法错误 -->
+<!-- 合并所有样式，包含渐变阴影、卡片文字、导航栏的全部修改 -->
 <style scoped>
 /* 极简暗色风格主界面 */
 .ark-minimal-dark {
@@ -310,10 +316,26 @@ watch(currentIndex, (val, oldVal) => {
   font-family: 'HarmonyOS Sans SC', '思源黑体', 'PingFang SC', 'Arial Black', '微软雅黑', sans-serif;
   display: flex;
   flex-direction: column;
-  position: relative; /* 为绝对定位的正方形装饰提供父容器 */
+  position: relative; /* 为绝对定位的正方形装饰和渐变阴影提供父容器 */
+  z-index: 0; /* 确保父容器有基础层级 */
 }
 
-/* 白色正方形背景装饰样式 */
+/* 黑色渐变阴影 - 层级设为-1，确保在最底层 */
+.ark-minimal-dark::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  /* 从左到右：黑色半透明（0.15）→ 完全透明，可调整0.15改变阴影深浅 */
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.121), transparent);
+  pointer-events: none; /* 不影响鼠标交互 */
+  z-index: -1; /* 设为-1，确保在所有内容下方 */
+  opacity: 1;
+}
+
+/* 修复：白色正方形容器 - 层级设为1，确保在阴影上方 */
 .square-decorations-container {
   position: fixed;
   top: 0;
@@ -321,14 +343,13 @@ watch(currentIndex, (val, oldVal) => {
   width: 100vw;
   height: 100vh;
   pointer-events: none; /* 不影响鼠标交互 */
-  z-index: 0; /* 低于所有内容，只作为背景 */
+  z-index: 1; /* 高于渐变阴影（-1），低于其他内容（10+） */
   overflow: hidden;
 }
 
 /* 生成多个不同大小、位置、动画延迟的正方形 */
 .square-decorations-container::before,
 .square-decorations-container::after,
-.ark-minimal-dark::before,
 .ark-minimal-dark::after {
   content: '';
   position: absolute;
@@ -337,6 +358,7 @@ watch(currentIndex, (val, oldVal) => {
   animation: squareFloat 18s infinite ease-in-out;
   opacity: 1;
   filter: none;
+  z-index: 1; /* 确保正方形伪元素层级正确 */
 }
 
 /* 正方形1：左上角 */
@@ -358,7 +380,7 @@ watch(currentIndex, (val, oldVal) => {
 }
 
 /* 正方形3：中上部 */
-.ark-minimal-dark::before {
+.ark-minimal-dark::after {
   content: '';
   position: absolute;
   width: 60px;
@@ -369,22 +391,21 @@ watch(currentIndex, (val, oldVal) => {
   border-radius: 4px;
   animation: squareFloat 22s infinite ease-in-out;
   animation-delay: 12s;
-  z-index: 0;
+  z-index: 1; /* 调整为1，和其他正方形同层级 */
 }
 
-/* 正方形4：中下部 */
-.ark-minimal-dark::after {
-  content: '';
+/* 修复：正方形4 - 修正样式定义（不再用content，因为是真实DOM元素） */
+.square-decorations-container .square-4 {
   position: absolute;
   width: 300px;
   height: 300px;
   bottom: 10%;
   left: 17%;
   background: rgb(255, 255, 255);
-  border-radius: 4px;
   animation: squareFloat 20s infinite ease-in-out;
   animation-delay: 8s;
-  z-index: 0;
+  z-index: 1; /* 确保层级正确 */
+  border-radius: 4px;
 }
 
 /* 正方形浮动动画 */
@@ -403,7 +424,7 @@ watch(currentIndex, (val, oldVal) => {
   }
 }
 
-
+/* 导航栏样式 - 左右透明中间实 */
 .ark-navbar {
   position: relative;
   width: 100vw;
@@ -413,17 +434,38 @@ watch(currentIndex, (val, oldVal) => {
   justify-content: center;
   background: #f5f6f7;
   box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-  z-index: 10;
+  z-index: 10; /* 确保导航栏在正方形上方 */
+  /* 确保遮罩效果生效 */
+  overflow: hidden;
 }
+
 .ark-navbar-bg {
   position: absolute;
   left: 0; top: 0; width: 100%; height: 100%;
   background: url('@/assets/bg.jpg') center/cover no-repeat;
   background-position-y: 73%;
-  opacity: 0.25;
+  opacity: 0.5; /* 背景图基础透明度（可整体调整） */
   z-index: 1;
   pointer-events: none;
+  /* 核心：水平线性渐变遮罩 - 中间实、左右透 */
+  -webkit-mask-image: linear-gradient(
+    to right, /* 渐变方向：水平从左到右 */
+    rgba(0, 0, 0, 0.1) 0%,    /* 最左侧：透明度高（更透） */
+    rgba(0, 0, 0, 0.5) 48%,   /* 左过渡到中间：逐渐变实 */
+    rgba(0, 0, 0, 1) 51%,     /* 正中间：完全显示（最实） */
+    rgba(0, 0, 0, 0.5) 56%,   /* 右过渡区：逐渐变透 */
+    rgba(0, 0, 0, 0.1) 100%   /* 最右侧：透明度高（更透） */
+  );
+  mask-image: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.1) 0%,
+    rgba(0, 0, 0, 0.5) 48%,
+    rgba(0, 0, 0, 1) 51%,
+    rgba(0, 0, 0, 0.5) 56%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
 }
+
 .ark-navbar-center {
   position: relative;
   z-index: 2;
@@ -432,17 +474,21 @@ watch(currentIndex, (val, oldVal) => {
   align-items: center;
   justify-content: center;
 }
+
 .ark-title-gradient {
   font-size: 2.3rem;
-  font-weight: 900;
+  font-weight: 320;
   letter-spacing: 0.08em;
-  background: linear-gradient(90deg, #23272a 10%, #bfc2c9 60%, #a3a6b3 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #000000;
+  -webkit-background-clip: initial;
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  background: none;
   text-align: center;
   margin: 0;
+  font-family: 'HarmonyOS Sans SC', '思源黑体', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
+
 .ark-navbar-actions {
   position: absolute;
   right: 32px;
@@ -491,7 +537,7 @@ watch(currentIndex, (val, oldVal) => {
   width: 100vw;
   padding: 0;
   position: relative; /* 新增：确保内容层级高于正方形装饰 */
-  z-index: 1;
+  z-index: 10; /* 确保主内容在正方形上方 */
 }
 /* 轮播容器和布局 - 核心修改：加宽容器容纳三张卡片 */
 .ark-carousel-wrap {
@@ -501,6 +547,7 @@ watch(currentIndex, (val, oldVal) => {
   justify-content: center;
   position: relative;
   overflow: hidden; /* 防止卡片超出容器 */
+  z-index: 10;
 }
 .ark-carousel {
   display: flex;
@@ -510,32 +557,62 @@ watch(currentIndex, (val, oldVal) => {
   justify-content: center;
   position: relative;
   overflow: visible;
+  z-index: 10;
 }
-/* 轮播左右按钮 - 修正位置错误 */
+
+/* 轮播左右按钮 - 核心修改：
+   1. 移除圆角，按钮变为无圆角矩形
+   2. 按钮尺寸调整为80px(宽) x 180px(高)（竖长矩形）
+   3. 移除内部边框，仅保留基础样式
+   4. 优化悬浮效果，仅保留淡黑色阴影
+   5. 箭头尺寸调整为70x160px，匹配竖长按钮大小
+*/
 .ark-carousel-btn {
-  background: rgba(255,255,255,0.95);
-  border: 1px solid rgba(35,39,42,0.06);
-  border-radius: 10px;
-  width: 48px;
-  height: 48px;
+  background: transparent;
+  border: none;
+  /* 核心修改1：按钮宽度调整为80px */
+  width: 80px;
+  /* 核心修改2：按钮高度调整为180px */
+  height: 180px;
+  /* 核心修改：移除圆角，改为无圆角矩形 */
+  /* border-radius: 10px; */
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #23272a;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
   cursor: pointer;
-  opacity: 0.98;
-  transition: transform 0.18s ease, background 0.18s ease;
-  position: absolute;
+  opacity: 0.9;
+  /* 核心修改：仅保留必要的过渡属性 */
+  transition: opacity 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  position: fixed;
   top: 50%;
   transform: translateY(-50%);
   z-index: 30;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  /* 核心修改：移除内部边框 */
+  /* box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3); */
 }
-.ark-carousel-btn:hover { transform: translateY(-50%) scale(1.04); }
-.ark-carousel-btn.left { left: 20px; } /* 左侧按钮位置 */
-.ark-carousel-btn.right { right: 0%; } /* 右侧按钮位置，从-600px改为-60px */
 
-/* 轮播卡片样式  */
+/* 核心修改：优化悬浮效果 - 仅保留淡黑色阴影 */
+.ark-carousel-btn:hover { 
+  transform: translateY(-50%) scale(1.08); 
+  opacity: 1;
+  /* 核心修改：淡淡的黑色阴影（扩散15px，透明度0.3） */
+  box-shadow: 0 0 15px rgba(0,0,0,0.3);
+  /* 移除背景色和内部边框 */
+}
+
+/* 左侧按钮：贴近屏幕左边缘（15px间距） */
+.ark-carousel-btn.left { 
+  left: 15px; 
+} 
+/* 右侧按钮：贴近屏幕右边缘（15px间距） */
+.ark-carousel-btn.right { 
+  right: 15px; 
+}
+
+/* 轮播卡片样式  - 调整文字布局为下方居中 */
 .ark-function-card {
   position: absolute;
   left: 35%;
@@ -547,20 +624,23 @@ watch(currentIndex, (val, oldVal) => {
   background-position: center center;
   background-repeat: no-repeat;
   box-shadow: 0 4px 32px rgba(0,0,0,0.10), 0 1.5px 8px rgba(35,39,42,0.11);
+  /* 核心修改：flex布局改为居中对齐（水平+垂直），内容靠底部 */
+  display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-end;
+  align-items: center; /* 水平居中 */
+  justify-content: flex-end; /* 内容靠底部 */
   cursor: pointer;
   overflow: visible;
   border-radius: 0;
   transition: transform 0.4s cubic-bezier(.4,1.4,.6,1), opacity 0.3s, box-shadow 0.2s, visibility 0.3s;
+  z-index: 10; /* 确保卡片在正方形上方 */
 }
 
 .ark-function-card::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.42) 100%);
+  background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.42));
   z-index: 1;
   pointer-events: none;
 }
@@ -576,15 +656,19 @@ watch(currentIndex, (val, oldVal) => {
 }
 
 .ark-function-float-bg.white { display: none; }
+/* 卡片文字样式 - 黑色、居中、调整字体大小 */
 .ark-function-title {
   position: relative;
   z-index: 2;
-  font-size: 2.1rem;
+  /* 调整字体大小（可按需修改，当前1.8rem） */
+  font-size: 1.8rem;
   font-weight: 800;
-  color: #ffffff;
-  text-shadow: 0 6px 20px rgba(0,0,0,0.45);
+  /* 字体改为黑色 */
+  color: #000000;
   letter-spacing: 0.01em;
-  margin: 0 0 0.5em 32px;
+  /* 下方居中，仅保留底部间距 */
+  margin: 0 0 1em 0;
+  text-align: center;
   font-family: 'HarmonyOS Sans SC', '思源黑体', 'PingFang SC', 'Arial Black', '微软雅黑', sans-serif;
 }
 
@@ -1221,24 +1305,6 @@ feather-icon {
   font-size: 1.2rem;
 }
 
-/* 将左右按钮定位到轮播两侧 */
-.ark-carousel-btn.left {
-  position: absolute;
-  left: calc(50% - 30vw - 60px);
-  top: 50%;
-  transform: translateY(-50%);
-  margin: 0;
-  z-index: 30;
-}
-.ark-carousel-btn.right {
-  position: absolute;
-  left: calc(50% + 30vw + 20px);
-  top: 50%;
-  transform: translateY(-50%);
-  margin: 0;
-  z-index: 30;
-}
-
 .book-page {
   width: 60px;
   height: 60px;
@@ -1453,7 +1519,18 @@ feather-icon {
   .ark-carousel {
     width: 90vw;
   }
-  .ark-carousel-btn.left { left: -40px; }
-  .ark-carousel-btn.right { right: -40px; }
+  /* 移动端按钮间距更小，贴近屏幕边缘 */
+  .ark-carousel-btn.left { left: 8px; }
+  .ark-carousel-btn.right { right: 8px; }
+  /* 移动端按钮尺寸调整，适配小屏幕（保持竖长比例） */
+  .ark-carousel-btn {
+    width: 60px; /* 移动端按钮宽度适配，匹配80x180的PC端比例 */
+    height: 120px; /* 移动端按钮高度适配 */
+  }
+  /* 移动端箭头尺寸调整 */
+  .ark-carousel-btn svg {
+    width: 50px; /* 移动端箭头尺寸适配 */
+    height: 100px; /* 移动端箭头尺寸适配 */
+  }
 }
 </style>

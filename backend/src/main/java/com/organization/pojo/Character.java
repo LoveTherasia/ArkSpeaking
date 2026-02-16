@@ -11,7 +11,7 @@ import lombok.Data;
 public class Character {
     //角色ID
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "char_id", nullable = false, updatable = true)
     private Long id;
 

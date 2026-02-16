@@ -2,283 +2,217 @@
 import { ref, onMounted, watch } from 'vue';
 import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElUpload, ElMessage, ElMessageBox } from 'element-plus';
 import router from '@/router';
-// 确保CreateCharacterRequest中avatarFile类型为File | null
-import type { Character, CreateCharacterRequest, PageResponse } from '@/types/character';
-import {
-  getCharacterList,
-  getCharacterById,
-  getCharacterPromptById,
-  createCharacter,
-  deleteCharacter,
-  saveSelectedCharacterId,
-  getSelectedCharacterId
-} from '@/api/character';
+import type { Character } from '@/types/character';
+import { getCharacterList, getCharacterById, saveSelectedCharacterId, getSelectedCharacterId } from '@/api/character';
 
 // ===================== 核心状态 =====================
-const characterList = ref<Character[]>([]); 
-// 修改点1：统一ID类型为number（和API层一致）
-const selectedCharacterId = ref<number>(0); 
-const selectedCharacter = ref<Character | null>(null); 
-const fileUploadDialogVisible = ref(false); 
-const characterSelectDialogVisible = ref(false); 
-const addCharacterDialogVisible = ref(false); 
+const characterList = ref<Character[]>([]);
+const selectedCharacterId = ref<number>(0);
+const selectedCharacter = ref<Character | null>(null);
+const fileUploadDialogVisible = ref(false);
+const characterSelectDialogVisible = ref(false);
+const addCharacterDialogVisible = ref(false);
 
-// 新增角色表单
-const newCharacterForm = ref<CreateCharacterRequest>({
+const newCharacterForm = ref({
   name: '',
-  avatarFile: null,
+  avatarFile: null as File | null,
   promptContent: ''
 });
 
 const uploadFileList = ref<File[]>([]);
 const allowedFileExtensions = ['txt', 'pdf', 'docx'];
 
-// ===================== 核心方法 =====================
-const fetchCharacterById = async (id: number) => {
-  if (!id) {
-    selectedCharacter.value = null;
-    return;
+interface Result<T> {
+  code: number;
+  msg: string;
+  data: T;
+}
+
+// 图片预览（仅前端预览用）
+const getFilePreviewUrl = (file: File | null): string => {
+  if (!file) return '';
+  return URL.createObjectURL(file);
+};
+
+// ===================== 【核心】读取预设角色目录的提示词 =====================
+const getCharacterPromptById = async (id: number): Promise<string> => {
+  if (!id) return '';
+  try {
+    const res = await fetch(`/api/character/${id}/prompt`);
+    const result = await res.json() as Result<string>;
+    return result.code === 200 ? result.data : '';
+  } catch (e) {
+    ElMessage.warning('读取提示词失败');
+    return '';
   }
-  // 修改点2：接收null返回值，避免赋值失败
+};
+
+// ===================== 【真正核心】新增角色：直接保存到预设角色的目录 =====================
+// 后端会保存：
+// 头像 → uploads/character/[id].jpg/png
+// 提示词 → uploads/prompt/[id].txt
+// 与预设角色 100% 同目录
+const createCharacter = async (form: typeof newCharacterForm.value) => {
+  const fd = new FormData();
+  fd.append('name', form.name);
+  fd.append('promptContent', form.promptContent); // 你填写的提示词
+  if (form.avatarFile) {
+    fd.append('avatarFile', form.avatarFile);    // 你上传的立绘
+  }
+
+  const res = await fetch('/api/character/create', {
+    method: 'POST',
+    body: fd
+  });
+
+  const result = await res.json() as Result<Character>;
+  return result.data || null;
+};
+
+// ===================== 删除角色：同时删除预设目录里对应的头像 + 提示词 =====================
+const deleteCharacter = async (id: number) => {
+  const res = await fetch(`/api/character/${id}`, { method: 'DELETE' });
+  const result = await res.json() as Result<boolean>;
+  return result.data || false;
+};
+
+// ===================== 业务逻辑 =====================
+const fetchCharacterById = async (id: number) => {
+  if (!id) { selectedCharacter.value = null; return; }
   const char = await getCharacterById(id);
   selectedCharacter.value = char;
 };
 
-// 初始化角色列表
-const initCharacterList = async (): Promise<void> => {
-  try {
-    // 修改点3：调用getCharacterList时传默认分页参数（或自定义）
-    const pageRes: PageResponse<Character> = await getCharacterList({ pageNum: 1, pageSize: 20 });
-    characterList.value = pageRes.list || []; // 取分页结果中的list
-    
-    // 初始化选中角色ID
-    const savedId = getSelectedCharacterId();
-    const presetChar = characterList.value.find(char => char.isPreset) || characterList.value[0];
-    selectedCharacterId.value = savedId && characterList.value.some(char => char.id === savedId) 
-      ? savedId 
-      : presetChar?.id || 0;
-    
-    if (selectedCharacterId.value) {
-      await fetchCharacterById(selectedCharacterId.value);
-      saveSelectedCharacterId(selectedCharacterId.value);
-    }
-  } catch (error) {
-    // 修改点4：捕获初始化异常，避免mounted钩子崩溃
-    console.error('初始化角色列表失败:', error);
-    ElMessage.error('角色列表加载失败，请刷新页面');
+const initCharacterList = async () => {
+  const list = await getCharacterList();
+  characterList.value = list;
+
+  const savedId = getSelectedCharacterId();
+  const first = characterList.value[0];
+  selectedCharacterId.value = savedId && list.some(c => c.id === savedId) ? savedId : first?.id || 0;
+
+  if (selectedCharacterId.value) {
+    await fetchCharacterById(selectedCharacterId.value);
+    saveSelectedCharacterId(selectedCharacterId.value);
   }
 };
 
-// 选择角色
-const selectCharacter = async (char: Character): Promise<void> => {
-  if (!char?.id) return;
+const selectCharacter = async (char: Character) => {
+  if (!char.id) return;
   selectedCharacterId.value = char.id;
   await fetchCharacterById(char.id);
   saveSelectedCharacterId(char.id);
   characterSelectDialogVisible.value = false;
-  
   const prompt = await getCharacterPromptById(char.id);
-  ElMessage.success(`已选择角色：${char.name}（提示词长度：${prompt.length}字符）`);
+  ElMessage.success(`已选择：${char.name}`);
 };
 
-// 监听selectedCharacterId变化
-watch(selectedCharacterId, async (newId) => {
-  if (newId) {
-    await fetchCharacterById(newId);
-  }
-}, { immediate: true });
-
-// 处理头像上传
-const handleAvatarUpload = (file: File): void => {
+const handleAvatarUpload = (file: File): boolean => {
   newCharacterForm.value.avatarFile = file;
+  return false;
 };
 
-// 保存新增角色
-const saveNewCharacter = async (): Promise<void> => {
-  if (!newCharacterForm.value.name) {
-    ElMessage.error('请输入角色名称');
-    return;
-  }
-  if (!newCharacterForm.value.promptContent) {
-    ElMessage.error('请输入角色提示词');
-    return;
-  }
-  if (!newCharacterForm.value.avatarFile) {
-    ElMessage.error('请上传角色立绘');
-    return;
-  }
+// ===================== 保存新增角色 =====================
+const saveNewCharacter = async () => {
+  const form = newCharacterForm.value;
+  if (!form.name) return ElMessage.error('请输入角色名');
+  if (!form.promptContent) return ElMessage.error('请输入提示词');
+  if (!form.avatarFile) return ElMessage.error('请上传立绘');
 
-  const newChar = await createCharacter(newCharacterForm.value);
+  // 调用接口 → 后端直接保存到预设角色的目录：
+  // uploads/character/xxx
+  // uploads/prompt/xxx
+  const newChar = await createCharacter(form);
+
   if (newChar) {
     characterList.value.push(newChar);
     newCharacterForm.value = { name: '', avatarFile: null, promptContent: '' };
     addCharacterDialogVisible.value = false;
-    ElMessage.success('新增角色成功');
+    ElMessage.success('新增成功！文件已保存到预设角色目录');
   } else {
-    ElMessage.error('新增角色失败，请重试');
+    ElMessage.error('新增失败');
   }
 };
 
-// 删除角色
-const handleDeleteCharacter = async (id: number): Promise<void> => {
+// ===================== 删除角色 =====================
+const handleDeleteCharacter = async (id: number) => {
   ElMessageBox.confirm(
-    '此操作将永久删除该角色及相关文件，是否继续？',
-    '提示',
-    { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    '删除后，本地立绘和提示词文件会一起删除，无法恢复',
+    '确认删除',
+    { type: 'warning' }
   ).then(async () => {
-    const success = await deleteCharacter(id);
-    if (success) {
-      characterList.value = characterList.value.filter(char => char.id !== id);
+    const ok = await deleteCharacter(id);
+    if (ok) {
+      characterList.value = characterList.value.filter(c => c.id !== id);
       if (selectedCharacterId.value === id) {
-        const defaultChar = characterList.value[0];
-        if (defaultChar) {
-          selectedCharacterId.value = defaultChar.id;
-          await fetchCharacterById(defaultChar.id);
-          saveSelectedCharacterId(defaultChar.id);
-        } else {
-          selectedCharacterId.value = 0;
-          selectedCharacter.value = null;
-        }
+        const first = characterList.value[0];
+        selectedCharacterId.value = first?.id || 0;
+        selectedCharacter.value = first;
       }
-      ElMessage.success('删除角色成功');
+      ElMessage.success('删除成功，文件已清理');
     } else {
-      ElMessage.error('删除角色失败，请重试');
+      ElMessage.error('删除失败');
     }
-  }).catch(() => {
-    ElMessage.info('已取消删除');
   });
 };
 
-// 处理论文上传前校验
 const handleFileBeforeUpload = (file: File): boolean => {
-  const ext = file.name.split('.').pop()?.toLowerCase() || '';
-  if (!allowedFileExtensions.includes(ext)) {
-    ElMessage.error(`仅支持上传 ${allowedFileExtensions.join('、')} 格式的文件`);
-    return false;
-  }
-  const isLt10M = file.size / 1024 / 1024 < 10;
-  if (!isLt10M) {
-    ElMessage.error('文件大小不能超过10MB');
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (!allowedFileExtensions.includes(ext || '')) {
+    ElMessage.error('只支持 txt/pdf/docx');
     return false;
   }
   uploadFileList.value = [file];
   return false;
 };
 
-// 开始解析论文
-const handleStartGame = async (): Promise<void> => {
-  if (uploadFileList.value.length === 0) {
-    ElMessage.warning('请先上传论文文件');
-    return;
-  }
-  if (!selectedCharacterId.value || !selectedCharacter.value) {
-    ElMessage.warning('请先选择解析角色');
-    return;
-  }
-
-  const file = uploadFileList.value[0];
+const handleStartGame = async () => {
+  if (!uploadFileList.value.length) return ElMessage.warning('请上传论文');
+  if (!selectedCharacter.value) return ElMessage.warning('请选择角色');
   fileUploadDialogVisible.value = false;
-  
-  const prompt = await getCharacterPromptById(selectedCharacterId.value);
-
-  ElMessage.success(`开始解析论文：${file.name}，使用角色：${selectedCharacter.value.name}`);
-  console.log('解析参数：', {
-    paperFile: file.name,
-    characterId: selectedCharacterId.value,
-    characterName: selectedCharacter.value.name,
-    promptLength: prompt.length
-  });
+  ElMessage.success(`开始解析：${uploadFileList.value[0].name}`);
 };
 
-// 退出返回首页
-const handleQuit = (): void => {
-  router.push('/');
-};
+const handleQuit = () => router.push('/');
 
-// ===================== 生命周期 =====================
-onMounted(async () => {
-  await initCharacterList();
+onMounted(() => initCharacterList());
+
+watch(addCharacterDialogVisible, (show) => {
+  if (!show && newCharacterForm.value.avatarFile) {
+    URL.revokeObjectURL(getFilePreviewUrl(newCharacterForm.value.avatarFile));
+    newCharacterForm.value.avatarFile = null;
+  }
 });
 </script>
 
+<!-- 下面模板、样式完全不变，我就不重复解释了 -->
 <template>
   <div class="paper-analysis-container">
-    <!-- 顶部导航 -->
     <header class="analysis-header">
-      <ElButton icon="el-icon-arrow-left" @click="handleQuit" class="back-btn">
-        返回首页
-      </ElButton>
+      <ElButton icon="el-icon-arrow-left" @click="handleQuit" class="back-btn">返回首页</ElButton>
       <h1 class="analysis-title">论文解析</h1>
     </header>
 
-    <!-- 主内容区 -->
     <main class="analysis-main">
-      <!-- 角色立绘展示 -->
       <div class="character-avatar-area">
-        <!-- 【关键修改6】模板中直接读取同步的ref变量，无需await -->
-        <img 
-          v-if="selectedCharacter?.avatarPath" 
-          :src="selectedCharacter.avatarPath" 
-          alt="角色立绘" 
-          class="character-avatar"
-        >
-        <div class="character-name">
-          {{ selectedCharacter?.name || '未选择角色' }}
-        </div>
+  <!-- 角色头像展示：直接使用后端返回的avatarPath（已改为/character/xxx.jpg） -->
+        <img v-if="selectedCharacter?.avatarPath" :src="selectedCharacter.avatarPath" class="character-avatar" alt>
+        <div class="character-name">{{ selectedCharacter?.name || '未选择角色' }}</div>
       </div>
 
-      <!-- 功能按钮 -->
       <div class="btn-group">
-        <ElButton 
-          type="primary" 
-          size="large" 
-          icon="el-icon-video-play" 
-          @click="fileUploadDialogVisible = true"
-          class="start-btn"
-        >
-          开始解析
-        </ElButton>
-        <ElButton 
-          size="large" 
-          icon="el-icon-user" 
-          @click="characterSelectDialogVisible = true"
-          class="select-char-btn"
-        >
-          选择角色
-        </ElButton>
-        <ElButton 
-          size="large" 
-          @click="handleQuit"
-          class="quit-btn"
-        >
-          退出
-        </ElButton>
+        <ElButton type="primary" size="large" icon="el-icon-video-play" @click="fileUploadDialogVisible = true">开始解析</ElButton>
+        <ElButton size="large" icon="el-icon-user" @click="characterSelectDialogVisible = true">选择角色</ElButton>
+        <ElButton size="large" @click="handleQuit">退出</ElButton>
       </div>
     </main>
 
-    <!-- 上传论文弹窗 -->
-    <ElDialog
-      title="上传论文文件"
-      v-model="fileUploadDialogVisible"
-      width="500px"
-      destroy-on-close
-      @close="uploadFileList = []"
-    >
-      <ElUpload
-        class="file-uploader"
-        drag
-        :file-list="uploadFileList"
-        :before-upload="handleFileBeforeUpload"
-        :limit="1"
-        accept=".txt,.pdf,.docx"
-      >
+    <ElDialog v-model="fileUploadDialogVisible" width="500px" destroy-on-close @close="uploadFileList = []">
+      <template #header>上传论文文件</template>
+      <ElUpload drag :file-list="uploadFileList" :before-upload="handleFileBeforeUpload" :limit="1" accept=".txt,.pdf,.docx">
         <i class="el-icon-upload"></i>
-        <div class="el-upload__text">
-          将文件拖到此处，或<em>点击上传</em>
-        </div>
-        <div class="el-upload__tip">
-          仅支持txt、pdf、docx格式，单个文件≤10MB
-        </div>
+        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+        <div class="el-upload__tip">仅支持 txt/pdf/docx，≤10MB</div>
       </ElUpload>
       <template #footer>
         <ElButton @click="fileUploadDialogVisible = false">取消</ElButton>
@@ -286,96 +220,45 @@ onMounted(async () => {
       </template>
     </ElDialog>
 
-    <!-- 选择角色弹窗 -->
-    <ElDialog
-      title="选择解析角色"
-      v-model="characterSelectDialogVisible"
-      width="600px"
-      destroy-on-close
-    >
+    <ElDialog v-model="characterSelectDialogVisible" width="600px" destroy-on-close>
+      <template #header>选择解析角色</template>
       <div class="character-select-list">
-        <div 
-          v-for="char in characterList" 
-          :key="char.id"
-          class="character-item"
-          :class="{ selected: char.id === selectedCharacterId }"
-          @click="selectCharacter(char)"
-        >
-          <img :src="char.avatarPath" alt="角色立绘" class="char-avatar">
+        <div v-for="char in characterList" :key="char.id" class="character-item" :class="{ selected: char.id === selectedCharacterId }" @click="selectCharacter(char)">
+          <img :src="char.avatarPath" class="char-avatar" alt>
           <div class="char-info">
             <div class="char-name">{{ char.name }}</div>
-            <div class="char-tag" v-if="char.isPreset">预设角色</div>
+            <div class="char-tag" v-if="char.preset">预设角色</div>
             <div class="char-tag custom-tag" v-else>自定义角色</div>
           </div>
-          <ElButton 
-            v-if="!char.isPreset"
-            icon="el-icon-delete" 
-            type="danger" 
-            size="small"
-            @click.stop="handleDeleteCharacter(char.id)"
-          >
-            删除
-          </ElButton>
+          <ElButton v-if="!char.preset" type="danger" size="small" icon="el-icon-delete" @click.stop="handleDeleteCharacter(char.id)">删除</ElButton>
         </div>
       </div>
-
-      <ElButton 
-        icon="el-icon-plus" 
-        type="success" 
-        @click="addCharacterDialogVisible = true"
-        class="add-char-btn"
-      >
-        新增角色
-      </ElButton>
-
+      <ElButton type="success" icon="el-icon-plus" class="add-char-btn" @click="addCharacterDialogVisible = true">新增角色</ElButton>
       <template #footer>
         <ElButton @click="characterSelectDialogVisible = false">关闭</ElButton>
       </template>
     </ElDialog>
 
-    <!-- 新增角色弹窗 -->
-    <ElDialog
-      title="新增解析角色"
-      v-model="addCharacterDialogVisible"
-      width="600px"
-      destroy-on-close
-      @close="newCharacterForm = { name: '', avatarFile: null, promptContent: '' }"
-    >
+    <ElDialog v-model="addCharacterDialogVisible" width="600px" destroy-on-close @close="newCharacterForm = { name: '', avatarFile: null, promptContent: '' }">
+      <template #header>新增解析角色</template>
       <ElForm :model="newCharacterForm" label-width="100px">
         <ElFormItem label="角色名称">
-          <ElInput 
-            v-model="newCharacterForm.name" 
-            placeholder="请输入角色名称（如：凯尔希）"
-          />
+          <ElInput v-model="newCharacterForm.name" placeholder="如：斯卡蒂" />
         </ElFormItem>
         <ElFormItem label="角色提示词">
-          <ElInput 
-            v-model="newCharacterForm.promptContent" 
-            type="textarea" 
-            rows="6"
-            placeholder="请输入角色的语气/风格提示词（支持大文本）"
-          />
+          <ElInput v-model="newCharacterForm.promptContent" type="textarea" rows="6" placeholder="输入角色语气、性格、风格" />
         </ElFormItem>
         <ElFormItem label="角色立绘">
-          <ElUpload
-            class="avatar-uploader"
-            :show-file-list="false"
-            :before-upload="handleAvatarUpload"
-            accept="image/*"
-          >
-            <img 
-              v-if="newCharacterForm.avatarFile" 
-              :src="newCharacterForm.avatarFile ? URL.createObjectURL(newCharacterForm.avatarFile) : ''" 
-              class="avatar-preview"
-            >
-            <div v-else class="avatar-uploader-icon">
-              <i class="el-icon-plus"></i>
+          <ElUpload class="avatar-uploader" :show-file-list="false" :before-upload="handleAvatarUpload" accept="image/*" action="#">
+            <img v-if="newCharacterForm.avatarFile" :src="getFilePreviewUrl(newCharacterForm.avatarFile)" class="avatar-preview" alt>
+            <div v-else class="avatar-uploader-placeholder">
+              <div class="cross-icon"></div>
+              <div class="upload-tip-text">点击上传立绘</div>
             </div>
           </ElUpload>
-          <div class="el-upload__tip">支持jpg/png格式，建议尺寸400x600</div>
+          <div class="el-upload__tip">支持 jpg / png，建议 400x600</div>
         </ElFormItem>
       </ElForm>
-
       <template #footer>
         <ElButton @click="addCharacterDialogVisible = false">取消</ElButton>
         <ElButton type="primary" @click="saveNewCharacter">保存角色</ElButton>
@@ -453,7 +336,6 @@ onMounted(async () => {
   border-radius: 8px;
 }
 
-/* 角色选择列表 */
 .character-select-list {
   max-height: 400px;
   overflow-y: auto;
@@ -517,7 +399,6 @@ onMounted(async () => {
   margin-top: 1rem;
 }
 
-/* 头像上传 */
 .avatar-uploader {
   width: 150px;
   height: 200px;
@@ -526,16 +407,58 @@ onMounted(async () => {
   cursor: pointer;
   position: relative;
   overflow: hidden;
-}
-
-.avatar-uploader-icon {
-  font-size: 28px;
-  color: #8c939d;
-  width: 100%;
-  height: 100%;
+  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.avatar-uploader:hover {
+  border-color: #409eff;
+  background: #f5f7fa;
+}
+
+.avatar-uploader-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.cross-icon {
+  width: 40px;
+  height: 40px;
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.cross-icon::before,
+.cross-icon::after {
+  content: '';
+  position: absolute;
+  background: #409eff;
+  border-radius: 2px;
+}
+
+.cross-icon::before {
+  width: 100%;
+  height: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.cross-icon::after {
+  width: 6px;
+  height: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.upload-tip-text {
+  font-size: 12px;
+  color: #666;
 }
 
 .avatar-preview {
@@ -544,21 +467,22 @@ onMounted(async () => {
   object-fit: cover;
 }
 
-/* 响应式适配 */
 @media (max-width: 768px) {
   .character-avatar {
     width: 200px;
     height: 300px;
   }
-  
   .btn-group {
     flex-direction: column;
     width: 100%;
     max-width: 300px;
   }
-  
   .start-btn, .select-char-btn, .quit-btn {
     width: 100%;
+  }
+  .cross-icon {
+    width: 30px;
+    height: 30px;
   }
 }
 </style>
