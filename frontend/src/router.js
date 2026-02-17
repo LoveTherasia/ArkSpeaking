@@ -28,9 +28,9 @@ const router = createRouter({
             component:()=>import('./views/PaperAnalysis.vue')
         },
         {
-            path:'/galgame-play',
-            name:'GalgamePlay',
-            component:()=>import('./views/GalgamePlay.vue')
+            path:'/paper-Interaction',
+            name:'PaperInteraction',
+            component:()=>import('./views/PaperInteraction.vue')
         }
     ]
 });

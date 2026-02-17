@@ -255,7 +255,7 @@ watch(currentIndex, (val, oldVal) => {
   <div class="ark-minimal-dark">
     <!-- 白色正方形背景装饰容器 -->
     <div class="square-decorations-container">
-      <!-- 修复：添加正方形4的DOM元素 -->
+      <!-- 添加正方形4的DOM元素 -->
       <div class="square-4"></div>
     </div>
     
@@ -295,7 +295,7 @@ watch(currentIndex, (val, oldVal) => {
             </div>
 
             <button class="ark-carousel-btn right" @click="nextFunction" aria-label="下一张">
-              <!-- 核心修改：箭头尺寸改为70x160，适配80x180的竖长按钮 -->
+              <!-- 核箭头尺寸改为70x160，适配80x180的竖长按钮 -->
               <svg width="70" height="160" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M9 6L15 12L9 18" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
@@ -306,7 +306,6 @@ watch(currentIndex, (val, oldVal) => {
     </div>
 </template>
 
-<!-- 合并所有样式，包含渐变阴影、卡片文字、导航栏的全部修改 -->
 <style scoped>
 /* 极简暗色风格主界面 */
 .ark-minimal-dark {
@@ -329,13 +328,13 @@ watch(currentIndex, (val, oldVal) => {
   width: 100vw;
   height: 100vh;
   /* 从左到右：黑色半透明（0.15）→ 完全透明，可调整0.15改变阴影深浅 */
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.121), transparent);
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.121), transparent); 
   pointer-events: none; /* 不影响鼠标交互 */
   z-index: -1; /* 设为-1，确保在所有内容下方 */
   opacity: 1;
 }
 
-/* 修复：白色正方形容器 - 层级设为1，确保在阴影上方 */
+/* 白色正方形容器 - 层级设为1，确保在阴影上方 */
 .square-decorations-container {
   position: fixed;
   top: 0;
@@ -405,7 +404,6 @@ watch(currentIndex, (val, oldVal) => {
   animation: squareFloat 20s infinite ease-in-out;
   animation-delay: 8s;
   z-index: 1; /* 确保层级正确 */
-  border-radius: 4px;
 }
 
 /* 正方形浮动动画 */

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { UploadFile } from 'element-plus';
 import { ref, onMounted, watch } from 'vue';
-import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElUpload, ElMessage, ElMessageBox } from 'element-plus';
+import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElUpload, type UploadInstance, ElMessage, ElMessageBox } from 'element-plus';
 import router from '@/router';
 import type { Character } from '@/types/character';
 import { getCharacterList, getCharacterById, saveSelectedCharacterId, getSelectedCharacterId } from '@/api/character';
@@ -19,8 +20,9 @@ const newCharacterForm = ref({
   promptContent: ''
 });
 
-const uploadFileList = ref<File[]>([]);
+const uploadFileList = ref<UploadFile[]>([]);
 const allowedFileExtensions = ['txt', 'pdf', 'docx'];
+const uploadRef = ref<UploadInstance>();
 
 interface Result<T> {
   code: number;
@@ -34,7 +36,7 @@ const getFilePreviewUrl = (file: File | null): string => {
   return URL.createObjectURL(file);
 };
 
-// ===================== 【核心】读取预设角色目录的提示词 =====================
+// ===================== 读取预设角色目录的提示词 =====================
 const getCharacterPromptById = async (id: number): Promise<string> => {
   if (!id) return '';
   try {
@@ -47,17 +49,13 @@ const getCharacterPromptById = async (id: number): Promise<string> => {
   }
 };
 
-// ===================== 【真正核心】新增角色：直接保存到预设角色的目录 =====================
-// 后端会保存：
-// 头像 → uploads/character/[id].jpg/png
-// 提示词 → uploads/prompt/[id].txt
-// 与预设角色 100% 同目录
+// ===================== 新增角色：保存到预设角色的目录 =====================
 const createCharacter = async (form: typeof newCharacterForm.value) => {
   const fd = new FormData();
   fd.append('name', form.name);
-  fd.append('promptContent', form.promptContent); // 你填写的提示词
+  fd.append('promptContent', form.promptContent); // 填写的提示词
   if (form.avatarFile) {
-    fd.append('avatarFile', form.avatarFile);    // 你上传的立绘
+    fd.append('avatarFile', form.avatarFile);    // 上传的立绘
   }
 
   const res = await fetch('/api/character/create', {
@@ -119,9 +117,6 @@ const saveNewCharacter = async () => {
   if (!form.promptContent) return ElMessage.error('请输入提示词');
   if (!form.avatarFile) return ElMessage.error('请上传立绘');
 
-  // 调用接口 → 后端直接保存到预设角色的目录：
-  // uploads/character/xxx
-  // uploads/prompt/xxx
   const newChar = await createCharacter(form);
 
   if (newChar) {
@@ -156,21 +151,148 @@ const handleDeleteCharacter = async (id: number) => {
   });
 };
 
+// 处理文件上传前的校验（仅校验，不再手动赋值fileList）
 const handleFileBeforeUpload = (file: File): boolean => {
   const ext = file.name.split('.').pop()?.toLowerCase();
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    ElMessage.error('文件大小不能超过10MB');
+    return false;
+  }
   if (!allowedFileExtensions.includes(ext || '')) {
     ElMessage.error('只支持 txt/pdf/docx');
     return false;
   }
-  uploadFileList.value = [file];
+  // 手动将原生File绑定到uploadFileList（补充raw）
+  uploadFileList.value = [{
+    uid: Date.now() + Math.random().toString(36).substr(2, 9), // 必须有uid
+    name: file.name,
+    raw: file, // 强制绑定原生File
+    size: file.size,
+    status: 'ready' as const,
+  }];
   return false;
 };
 
+// 修复核心问题：调整el-upload change事件的参数顺序
+// Element Plus el-upload的change事件参数顺序：
+// 1. 当前操作的单个文件（UploadFile）
+// 2. 完整的文件列表数组（UploadFile[]）
+// 3. 原生文件列表（File[]）
+const handleFileChange = (
+  currentFile: UploadFile, 
+  uploadFiles: UploadFile[] // 第二个参数是完整的文件列表
+  // 移除错误的第三个参数 uploadFilesRaw
+) => {
+  // 过滤有效文件（未被移除、未报错）
+  uploadFileList.value = uploadFiles.filter(file => 
+    file.status !== 'removed' && file.status !== 'error'
+  );
+  // 关键：手动给文件对象补充raw属性（auto-upload=false时可能缺失）
+  if (currentFile.raw) {
+    const target = uploadFileList.value.find(item => item.uid === currentFile.uid);
+    if (target) target.raw = currentFile.raw;
+  }
+};
+
+// 上传论文文件到后端的方法
+const uploadPaperFile = async (file: File): Promise<number | null> => {
+  const fd = new FormData();
+  fd.append('paperFile', file);
+  try {
+    const res = await fetch('/api/paper/upload', {
+      method: 'POST',
+      body: fd
+    });
+
+    // 新增：校验HTTP状态码（非200直接抛错）
+    if (!res.ok) {
+      throw new Error(`后端接口返回错误：${res.status} ${res.statusText}`);
+    }
+
+    const result = await res.json() as Result<{ id: number }>;
+    
+    // 新增：校验返回体格式
+    if (result.code !== 200) {
+      throw new Error(`后端返回错误：${result.msg || '上传失败'}`);
+    }
+    if (!result.data?.id) {
+      throw new Error('后端返回的论文ID为空！');
+    }
+
+    return result.data.id;
+  } catch (e) {
+    const err = e as Error;
+    ElMessage.error(`论文上传失败：${err.message}`);
+    console.error('uploadPaperFile报错：', err);
+    return null;
+  }
+};
+
+// 修复：先清空外部列表（双向绑定同步到组件内部），再调用clearFiles
+const handleUploadDialogClose = () => {
+  // 先清空外部数组（双向绑定自动同步到组件内部）
+  uploadFileList.value = [];
+  // 兜底调用clearFiles（此时内部已无文件，不会报错）
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles();
+  }
+};
+
+// 上传论文+跳转互动页
 const handleStartGame = async () => {
-  if (!uploadFileList.value.length) return ElMessage.warning('请上传论文');
-  if (!selectedCharacter.value) return ElMessage.warning('请选择角色');
-  fileUploadDialogVisible.value = false;
-  ElMessage.success(`开始解析：${uploadFileList.value[0].name}`);
+  // 1. 调试日志：确认函数执行
+  console.log('点击确认解析，开始执行handleStartGame');
+  console.log('当前文件列表：', uploadFileList.value);
+  console.log('当前选中角色：', selectedCharacter.value);
+
+  // 2. 前置校验（增强提示）
+  if (!uploadFileList.value.length) {
+    ElMessage.warning('请先上传论文文件！');
+    return;
+  }
+  if (!selectedCharacter.value) {
+    ElMessage.warning('请先选择解析角色！');
+    return;
+  }
+
+  // 3. 获取文件（加存在性校验）
+  const targetFile = uploadFileList.value[0].raw;
+  if (!targetFile) {
+    ElMessage.error('文件格式异常：未获取到原生文件对象，请重新上传！');
+    return;
+  }
+
+  try {
+    // 4. 上传论文（增强错误提示）
+    const paperId = await uploadPaperFile(targetFile);
+    if (!paperId) {
+      ElMessage.error('论文上传失败：后端未返回有效论文ID！');
+      return;
+    }
+
+    // 5. 关闭弹窗 + 提示
+    fileUploadDialogVisible.value = false;
+    ElMessage.success(`论文上传成功，即将进入学习模式：${uploadFileList.value[0].name}`);
+
+    // 6. 路由跳转（加日志）
+    console.log('开始跳转到互动页，参数：', {
+      characterId: selectedCharacter.value.id,
+      paperId: paperId
+    });
+    await router.push({
+      path: '/paper-interaction',
+      query: {
+        characterId: selectedCharacter.value.id,
+        paperId: paperId
+      }
+    });
+  } catch (e) {
+    // 7. 全局异常捕获（关键：暴露所有错误）
+    const err = e as Error;
+    ElMessage.error(`确认解析失败：${err.message}`);
+    console.error('handleStartGame执行报错：', err);
+  }
 };
 
 const handleQuit = () => router.push('/');
@@ -185,7 +307,6 @@ watch(addCharacterDialogVisible, (show) => {
 });
 </script>
 
-<!-- 下面模板、样式完全不变，我就不重复解释了 -->
 <template>
   <div class="paper-analysis-container">
     <header class="analysis-header">
@@ -195,7 +316,7 @@ watch(addCharacterDialogVisible, (show) => {
 
     <main class="analysis-main">
       <div class="character-avatar-area">
-  <!-- 角色头像展示：直接使用后端返回的avatarPath（已改为/character/xxx.jpg） -->
+        <!-- 角色头像展示：直接使用后端返回的avatarPath（已改为/character/xxx.jpg） -->
         <img v-if="selectedCharacter?.avatarPath" :src="selectedCharacter.avatarPath" class="character-avatar" alt>
         <div class="character-name">{{ selectedCharacter?.name || '未选择角色' }}</div>
       </div>
@@ -207,9 +328,18 @@ watch(addCharacterDialogVisible, (show) => {
       </div>
     </main>
 
-    <ElDialog v-model="fileUploadDialogVisible" width="500px" destroy-on-close @close="uploadFileList = []">
+    <ElDialog v-model="fileUploadDialogVisible" width="500px" destroy-on-close @close="handleUploadDialogClose">
       <template #header>上传论文文件</template>
-      <ElUpload drag :file-list="uploadFileList" :before-upload="handleFileBeforeUpload" :limit="1" accept=".txt,.pdf,.docx">
+
+      <ElUpload
+        ref="uploadRef"
+        drag
+        v-model:file-list="uploadFileList"
+        :auto-upload="false"
+        :limit="1"
+        accept=".txt,.pdf,.docx"
+        @change="handleFileChange"
+      >
         <i class="el-icon-upload"></i>
         <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
         <div class="el-upload__tip">仅支持 txt/pdf/docx，≤10MB</div>
@@ -260,8 +390,8 @@ watch(addCharacterDialogVisible, (show) => {
         </ElFormItem>
       </ElForm>
       <template #footer>
-        <ElButton @click="addCharacterDialogVisible = false">取消</ElButton>
-        <ElButton type="primary" @click="saveNewCharacter">保存角色</ElButton>
+      <ElButton @click="addCharacterDialogVisible = false">取消</ElButton>
+      <ElButton type="primary" @click="saveNewCharacter">保存角色</ElButton>
       </template>
     </ElDialog>
   </div>
