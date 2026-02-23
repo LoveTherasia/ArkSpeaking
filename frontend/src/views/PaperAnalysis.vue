@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { UploadFile } from 'element-plus';
 import { ref, onMounted, watch } from 'vue';
-import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElUpload, type UploadInstance, ElMessage, ElMessageBox } from 'element-plus';
+import { ElButton, ElDialog, ElForm, ElFormItem, ElLoading, ElInput, ElUpload, type UploadInstance, ElMessage, ElMessageBox } from 'element-plus';
 import router from '@/router';
 import type { Character } from '@/types/character';
 import { getCharacterList, getCharacterById, saveSelectedCharacterId, getSelectedCharacterId } from '@/api/character';
@@ -23,7 +23,10 @@ const newCharacterForm = ref({
 const uploadFileList = ref<UploadFile[]>([]);
 const allowedFileExtensions = ['txt', 'pdf', 'docx'];
 const uploadRef = ref<UploadInstance>();
+const loading = ref(false);//加载状态
 
+const promptContent = ref(''); // 角色提示词内容
+let paperPath = ref('');
 interface Result<T> {
   code: number;
   msg: string;
@@ -102,6 +105,8 @@ const selectCharacter = async (char: Character) => {
   saveSelectedCharacterId(char.id);
   characterSelectDialogVisible.value = false;
   const prompt = await getCharacterPromptById(char.id);
+  // 自动填充角色提示词到输入框
+  promptContent.value = prompt;
   ElMessage.success(`已选择：${char.name}`);
 };
 
@@ -175,14 +180,9 @@ const handleFileBeforeUpload = (file: File): boolean => {
 };
 
 // 修复核心问题：调整el-upload change事件的参数顺序
-// Element Plus el-upload的change事件参数顺序：
-// 1. 当前操作的单个文件（UploadFile）
-// 2. 完整的文件列表数组（UploadFile[]）
-// 3. 原生文件列表（File[]）
 const handleFileChange = (
   currentFile: UploadFile, 
-  uploadFiles: UploadFile[] // 第二个参数是完整的文件列表
-  // 移除错误的第三个参数 uploadFilesRaw
+  uploadFiles: UploadFile[]
 ) => {
   // 过滤有效文件（未被移除、未报错）
   uploadFileList.value = uploadFiles.filter(file => 
@@ -195,64 +195,86 @@ const handleFileChange = (
   }
 };
 
-// 上传论文文件到后端的方法
-const uploadPaperFile = async (file: File): Promise<number | null> => {
-  const fd = new FormData();
-  fd.append('paperFile', file);
-  try {
-    const res = await fetch('/api/paper/upload', {
-      method: 'POST',
-      body: fd
-    });
+// ===================== 核心修复：统一上传论文函数 =====================
+const uploadPaperFile = async (file: File) => {
+  const formData = new FormData();
+  formData.append('paperFile', file);
 
-    // 新增：校验HTTP状态码（非200直接抛错）
-    if (!res.ok) {
-      throw new Error(`后端接口返回错误：${res.status} ${res.statusText}`);
-    }
+  const res = await fetch('/api/galgame/paper/upload', {
+    method: 'POST',
+    body: formData
+  });
 
-    const result = await res.json() as Result<{ id: number }>;
-    
-    // 新增：校验返回体格式
-    if (result.code !== 200) {
-      throw new Error(`后端返回错误：${result.msg || '上传失败'}`);
-    }
-    if (!result.data?.id) {
-      throw new Error('后端返回的论文ID为空！');
-    }
-
-    return result.data.id;
-  } catch (e) {
-    const err = e as Error;
-    ElMessage.error(`论文上传失败：${err.message}`);
-    console.error('uploadPaperFile报错：', err);
-    return null;
+  const result = await res.json();
+  if (result.code !== 200) {
+    throw new Error(result.msg || '论文上传失败');
   }
+
+  // 返回论文ID和路径（兼容原有逻辑）
+  return {
+    id: result.data.id || 1, // 后端返回的paperId
+    path: result.data // 论文相对路径
+  };
 };
 
 // 修复：先清空外部列表（双向绑定同步到组件内部），再调用clearFiles
 const handleUploadDialogClose = () => {
-  // 先清空外部数组（双向绑定自动同步到组件内部）
   uploadFileList.value = [];
-  // 兜底调用clearFiles（此时内部已无文件，不会报错）
   if (uploadRef.value) {
     uploadRef.value.clearFiles();
   }
 };
 
-// 上传论文+跳转互动页
+// ===================== 保存角色提示词（修复trim语法错误） =====================
+const savePrompt = async () => {
+  // 修复：trim()需要加括号
+  if (!promptContent.value.trim()) {
+    ElMessage.warning('提示词内容不能为空！');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/galgame/character/prompt', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        promptContent: promptContent.value.trim()
+      })
+    });
+
+    const result = await res.json();
+    if (result.code !== 200) {
+      throw new Error(result.msg || '保存提示词失败');
+    }
+
+    ElMessage.success('提示词保存并完成AI加工！');
+  } catch (e) {
+    const err = e as Error;
+    ElMessage.error(`保存提示词失败：${err.message}`);
+    console.error('savePrompt报错：', err);
+  }
+};
+
+// ===================== 整合核心逻辑：解析论文+生成脚本+跳转WebGAL =====================
 const handleStartGame = async () => {
-  // 1. 调试日志：确认函数执行
+  // 1. 调试日志
   console.log('点击确认解析，开始执行handleStartGame');
   console.log('当前文件列表：', uploadFileList.value);
   console.log('当前选中角色：', selectedCharacter.value);
 
-  // 2. 前置校验（增强提示）
+  // 2. 前置校验
   if (!uploadFileList.value.length) {
     ElMessage.warning('请先上传论文文件！');
     return;
   }
   if (!selectedCharacter.value) {
     ElMessage.warning('请先选择解析角色！');
+    return;
+  }
+  if (!promptContent.value.trim()) {
+    ElMessage.warning('请先保存角色提示词！');
     return;
   }
 
@@ -263,35 +285,53 @@ const handleStartGame = async () => {
     return;
   }
 
+  const loadingInstance = ElLoading.service({
+    lock: true,
+    text: '正在解析论文并生成GAL脚本...',
+    background: 'rgba(0, 0, 0, 0.7)',
+  });
+
   try {
-    // 4. 上传论文（增强错误提示）
-    const paperId = await uploadPaperFile(targetFile);
-    if (!paperId) {
-      ElMessage.error('论文上传失败：后端未返回有效论文ID！');
-      return;
+    // 4. 上传论文（修复：调用正确的函数名uploadPaperFile）
+    const uploadResult = await uploadPaperFile(targetFile);
+    if (!uploadResult) {
+      throw new Error('论文上传失败：后端未返回有效数据！');
+    }
+    paperPath.value = uploadResult.path;
+
+    // 5. 调用生成脚本接口
+    const res = await fetch('/api/galgame/script/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        paperPath: paperPath.value,
+        promptFile: 'nene.txt'
+      })
+    });
+
+    const result = await res.json();
+    if (result.code !== 200) {
+      throw new Error(result.msg || '生成脚本失败');
     }
 
-    // 5. 关闭弹窗 + 提示
+    // 6. 关闭弹窗 + 提示 + 跳转WebGAL（独立服务localhost:3000）
     fileUploadDialogVisible.value = false;
-    ElMessage.success(`论文上传成功，即将进入学习模式：${uploadFileList.value[0].name}`);
+    ElMessage.success(`论文解析成功，即将打开WebGAL界面：${uploadFileList.value[0].name}`);
+    
+    // 跳转至独立的WebGAL服务（新窗口打开，保留原页面）
+    setTimeout(() => {
+      window.open('http://localhost:3000', '_blank');
+    }, 1500);
 
-    // 6. 路由跳转（加日志）
-    console.log('开始跳转到互动页，参数：', {
-      characterId: selectedCharacter.value.id,
-      paperId: paperId
-    });
-    await router.push({
-      path: '/paper-interaction',
-      query: {
-        characterId: selectedCharacter.value.id,
-        paperId: paperId
-      }
-    });
   } catch (e) {
-    // 7. 全局异常捕获（关键：暴露所有错误）
+    // 7. 全局异常捕获
     const err = e as Error;
     ElMessage.error(`确认解析失败：${err.message}`);
     console.error('handleStartGame执行报错：', err);
+  } finally {
+    loadingInstance.close();
   }
 };
 

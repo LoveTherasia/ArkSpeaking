@@ -1,0 +1,6 @@
+# Galgame/core/requirements.txt
+PyPDF2>=3.0.1          # PDF解析
+python-docx>=0.8.11    # Word解析
+requests>=2.31.0       # 调用AI/TTS接口
+python-dotenv>=1.0.0   # 读取.env环境变量
+flask>=2.3.3           # 临时测试接口（后续对接SpringBoot）
