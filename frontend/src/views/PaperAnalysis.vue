@@ -299,6 +299,8 @@ const handleStartGame = async () => {
     }
     paperPath.value = uploadResult.path;
 
+    await savePrompt(); // 确保提示词保存并完成AI加工后再继续下一步
+
     // 5. 调用生成脚本接口
     const res = await fetch('/api/galgame/script/generate', {
       method: 'POST',
@@ -316,11 +318,11 @@ const handleStartGame = async () => {
       throw new Error(result.msg || '生成脚本失败');
     }
 
-    // 6. 关闭弹窗 + 提示 + 跳转WebGAL（独立服务localhost:3000）
+    // 6. 关闭弹窗 + 提示 + 跳转WebGAL
     fileUploadDialogVisible.value = false;
     ElMessage.success(`论文解析成功，即将打开WebGAL界面：${uploadFileList.value[0].name}`);
     
-    // 跳转至独立的WebGAL服务（新窗口打开，保留原页面）
+    // 跳转至独立的WebGAL服务
     setTimeout(() => {
       window.open('http://localhost:3000', '_blank');
     }, 1500);
